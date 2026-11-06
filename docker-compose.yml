@@ -1,0 +1,8 @@
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+  ui:
+    build: .
+    command: streamlit run app/ui/Home.py --server.address=0.0.0.0
+    ports: ["8501:8501"]

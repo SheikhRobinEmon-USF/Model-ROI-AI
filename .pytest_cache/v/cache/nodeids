@@ -1,0 +1,10 @@
+[
+  "tests/test_foundation.py::test_api",
+  "tests/test_foundation.py::test_classifier_unseen",
+  "tests/test_foundation.py::test_demo",
+  "tests/test_foundation.py::test_exact_reference",
+  "tests/test_foundation.py::test_invalid_counts[-1-5]",
+  "tests/test_foundation.py::test_invalid_counts[6-5]",
+  "tests/test_foundation.py::test_percentile",
+  "tests/test_foundation.py::test_wilson_reference"
+]
