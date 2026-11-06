@@ -1,0 +1,131 @@
+# Free local model setup: Windows, macOS, Linux
+
+Policy updated November 6, 2026: no paid APIs. Use local downloadable weights with Ollama. Hugging Face is the model source; local computation uses your own RAM, CPU/GPU and electricity. Hosted inference is not automatically free because weights are downloadable.
+
+## Recommended models
+
+| Model | Role | License | Practical starting hardware (estimate, not minimum guarantee) |
+|---|---|---|---|
+| Qwen3 4B, quantized | Default balanced local candidate | Apache 2.0 | 16 GB system RAM preferred |
+| Phi-4-mini, quantized (3.8B) | Independent model-family comparison | MIT | 16 GB system RAM preferred |
+| Qwen3 1.7B, quantized | Lower-memory fallback, same-family baseline | Check exact artifact license before redistribution | 8 GB system RAM starting point |
+
+Use one model at a time and a short context (4,096 tokens). CPU-only works but can be slow. Available memory, quantization and prompt length determine actual fit. Reserve roughly 15 GB free disk for the application and a small model pair, then check download sizes. These are planning estimates. No accuracy or latency ranking has been measured for this project.
+
+## 1. Install prerequisites
+
+Install Git and Python 3.12. Install Ollama from https://ollama.com/download.
+
+### Windows (PowerShell)
+
+Ollama supports Windows 10 22H2 or newer. Install the native Windows application and open it. Install current GPU drivers if using acceleration. No WSL is required.
+
+```powershell
+git clone https://github.com/SheikhRobinEmon-USF/Model-ROI-AI.git
+cd Model-ROI-AI
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Using the environment's Python directly avoids PowerShell activation-policy changes.
+
+### macOS (Terminal)
+
+Ollama requires macOS 14 or newer. Apple Silicon supports GPU acceleration; Intel Macs use CPU. Download the DMG, move Ollama to Applications, and open it.
+
+```bash
+git clone https://github.com/SheikhRobinEmon-USF/Model-ROI-AI.git
+cd Model-ROI-AI
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+python -m pytest -q
+```
+
+### Linux (Terminal)
+
+Install Git, Python 3.12 and its venv package using your distribution's package manager. Download and inspect Ollama's installer, then run it:
+
+```bash
+curl -fsSL https://ollama.com/install.sh -o /tmp/ollama-install.sh
+less /tmp/ollama-install.sh
+sh /tmp/ollama-install.sh
+git clone https://github.com/SheikhRobinEmon-USF/Model-ROI-AI.git
+cd Model-ROI-AI
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+python -m pytest -q
+```
+
+If the Ollama service is not running, run `ollama serve` in another terminal. GPU support depends on your driver/hardware; see https://docs.ollama.com/gpu.
+
+## 2. Download local models (same commands on all three systems)
+
+```text
+ollama pull qwen3:4b
+ollama pull phi4-mini
+ollama list
+ollama run qwen3:4b
+```
+
+Optional lower-memory model: `ollama pull qwen3:1.7b`.
+
+For a model downloaded directly from the official Hugging Face GGUF repository:
+
+```text
+ollama run hf.co/Qwen/Qwen3-4B-GGUF:Q8_0
+```
+
+Q8 uses more memory than the default quantized Ollama tag. Hugging Face Transformers/safetensors repositories are not interchangeable with GGUF repositories. Only use the GGUF command for compatible artifacts. The Ollama-library route and HF route can use different quantizations; record that difference in benchmark results.
+
+## 3. Verify local inference through this project
+
+Windows:
+```powershell
+.\.venv\Scripts\python.exe -m app.providers.local --model qwen3:4b
+```
+macOS/Linux (activated environment):
+```bash
+python -m app.providers.local --model qwen3:4b
+```
+
+The probe calls only `127.0.0.1:11434`, never a paid provider. Models must already be downloaded. This is an inference probe, not a complete benchmark. It records the installed model digest when available. Do not claim cross-machine reproducibility without recording Ollama version, hardware, quantization and settings as well.
+
+## 4. Start the existing offline dashboard
+
+Windows:
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app/ui/Home.py
+```
+macOS/Linux:
+```bash
+python -m streamlit run app/ui/Home.py
+```
+
+Open http://localhost:8501. The current dashboard still runs the five-case mock; the local probe is separate. Full local-model benchmark/dashboard integration remains unfinished. Paid routes remain disabled.
+
+## Troubleshooting and deployment
+
+- Connection refused: open Ollama or run `ollama serve`; ensure port 11434 is available.
+- Model not found: run the matching `ollama pull` command and inspect `ollama list`.
+- Out of memory: use 1.7B, close other apps, keep context short and run sequentially.
+- Slow output: CPU-only inference can be slow; compare measured latency on the actual host.
+- Container localhost points to the container, not the host. This probe is intentionally for native execution; Docker networking for local inference is not implemented.
+- Keep Ollama bound to localhost. Do not expose its unauthenticated API publicly.
+- For 10–15 monthly testers, publish recorded local benchmark results and let visitors explore the offline interface. Live inference requires an always-on host; free model weights do not supply free hosting.
+- The old two-paid-provider release gate is superseded by the user's no-paid-API direction. A local-model release must be labeled as such, with actual local evidence still required.
+
+## Sources checked November 6, 2026
+
+- https://huggingface.co/Qwen/Qwen3-4B
+- https://huggingface.co/Qwen/Qwen3-4B-GGUF
+- https://huggingface.co/microsoft/Phi-4-mini-instruct
+- https://huggingface.co/docs/hub/ollama
+- https://ollama.com/library/qwen3
+- https://ollama.com/library/phi4-mini
+- https://docs.ollama.com/windows
+- https://docs.ollama.com/macos
+- https://docs.ollama.com/linux
+- https://docs.ollama.com/api/chat

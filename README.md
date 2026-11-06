@@ -26,3 +26,7 @@ No provider performance, adoption, or realized ROI is claimed. MIT licensed.
 - 50 draft synthetic cases (20 extraction, 20 hospital arithmetic, 10 classification), marked pending human review.
 - Strict JSONL import validation and exact typed JSON graders.
 - 68 passing tests as of this increment. This count includes 50 parametrized draft-case checks and does not establish production readiness.
+
+## Free local model direction
+
+Paid APIs are not authorized. Follow [SETUP.md](SETUP.md) for Windows, macOS and Linux instructions, Hugging Face/Ollama models, hardware guidance and the local inference probe. The probe is separate from the mock dashboard; local integration is not yet a completed release.
