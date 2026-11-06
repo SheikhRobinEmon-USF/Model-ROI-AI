@@ -10,40 +10,46 @@ from app.execution.local_run import run
 from app.storage.history import save, load, list_runs
 
 st.set_page_config(page_title='ModelROI | Evaluation studio',page_icon='◈',layout='wide')
-st.markdown('''<style>
-.stApp {background:#f5f7fb;} h1,h2,h3 {color:#14243c;letter-spacing:-.035em;}
-[data-testid="stSidebar"] {background:#101e32;}
-[data-testid="stSidebar"] * {color:#e3eaf5;}
-[data-testid="stMetric"] {background:white;border:1px solid #e2e8f0;border-radius:14px;padding:18px;}
-.stButton>button[kind="primary"] {background:#2158df;border:0;border-radius:9px;}
-.block-container {padding-top:2.5rem;max-width:1280px;}
-</style>''',unsafe_allow_html=True)
+from app.ui.theme import apply
+apply()
 local_enabled=os.getenv('MODELROI_ENABLE_LOCAL','false').lower()=='true'
+if 'page' not in st.session_state:
+    st.session_state.page='Overview'
+def navigate(page):
+    st.session_state.page=page
 with st.sidebar:
-    st.title('◈ ModelROI')
-    st.caption('MODEL EVALUATION STUDIO')
-    page=st.radio('Workspace',['Overview','Prompt lab','Benchmark','Results'])
+    st.markdown('<div class="roi-brand"><span>◈</span> ModelROI</div>',unsafe_allow_html=True)
+    st.caption('EVALUATION WORKSPACE')
+    st.write('')
+    for label,icon in [('Overview','◫'),('Prompt lab','⌘'),('Benchmark','▤'),('Results','◷')]:
+        st.button(f'{icon}  {label}',key='nav_'+label,type='primary' if st.session_state.page==label else 'secondary',on_click=navigate,args=(label,),use_container_width=True)
     st.divider()
-    st.write('Qwen3 4B')
-    st.caption('Local inference • No paid APIs')
-    st.caption('Local execution enabled' if local_enabled else 'Public preview: mock execution only')
+    st.caption('MODEL ENVIRONMENT')
+    st.write('Qwen3 · 4B')
+    st.caption('Local execution enabled' if local_enabled else 'Mock preview mode')
+    st.caption('Private by default. No paid APIs.')
+page=st.session_state.page
 
 st.caption('MODELROI AI / '+page.upper())
-st.title({'Overview':'Evidence before intuition.','Prompt lab':'Put your prompt to the test.',
+st.title({'Overview':'Workspace overview','Prompt lab':'Put your prompt to the test.',
           'Benchmark':'Measure a complete workload.','Results':'Understand every outcome.'}[page])
 
 if page=='Overview':
-    st.write('Test Qwen3 locally, inspect exact grading decisions, and export reproducible evaluation evidence.')
+    st.markdown('<div class="roi-hero"><span class="roi-eyebrow">LOCAL MODELS. CLEAR EVIDENCE.</span><h2>Know what your<br>model can deliver.</h2><p>Turn a prompt into an experiment. Evaluate Qwen3, understand its failures, and keep every result traceable.</p></div>',unsafe_allow_html=True)
+    cta1,cta2,space=st.columns([1,1,2])
+    cta1.button('Open prompt lab →',type='primary',on_click=navigate,args=('Prompt lab',),use_container_width=True)
+    cta2.button('Build a benchmark',on_click=navigate,args=('Benchmark',),use_container_width=True)
+    st.write('')
     cols=st.columns(3)
     cols[0].metric('Draft evaluation cases','50')
-    cols[1].metric('Task categories','3')
-    cols[2].metric('Paid API calls','Disabled')
-    st.subheader('A clear path from prompt to evidence')
-    a,b,c=st.columns(3)
-    a.info('1 · Explore\n\nTry a prompt and inspect the model response.')
-    b.info('2 · Evaluate\n\nRun a fixed workload with exact JSON grading.')
-    c.info('3 · Inspect\n\nReview failures, uncertainty, and downloadable evidence.')
-    st.warning('Development preview. Cases await independent review. No measured model ranking is published.')
+    cols[1].metric('Workload categories','3')
+    cols[2].metric('Provider API fees','$0')
+    st.write('')
+    st.subheader('From first prompt to defensible evidence')
+    cards=st.columns(3)
+    for col,number,title,body in zip(cards,['01','02','03'],['Explore a prompt','Evaluate a workload','Inspect the evidence'],['A focused playground for local Qwen3. See the response, timing, and model settings.','Choose a task category and run consistent checks across your selected cases.','Understand the misses. Review uncertainty and export the complete result.']):
+        col.markdown(f'<div class="roi-card"><span class="step">{number}</span><h3>{title}</h3><p>{body}</p></div>',unsafe_allow_html=True)
+    st.markdown('<div class="roi-note">Development preview · Labels await independent review. No measured model ranking is published.</div>',unsafe_allow_html=True)
     if st.button('Run instant mock demo',type='primary'):
         st.session_state.result=run_demo()
         st.success('Mock completed. Open Results to inspect it.')

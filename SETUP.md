@@ -152,3 +152,9 @@ Open Ollama, clone/download this repository, and open a terminal in the reposito
 The launcher checks the local Ollama service, asks before a missing Qwen3 download, creates an isolated Python environment, installs application dependencies, and starts the interface bound to localhost. Keep the terminal open while using the app. It makes no paid API calls. Downloading Python packages and missing model weights requires internet access.
 
 ChatGPT's remote workspace cannot automatically reach Ollama on your personal computer. Running this launcher locally is the supported bridge; you do not need to open firewall ports or share API credentials.
+
+## Updating the redesigned interface on macOS
+
+Stop the running app with Control+C. If your folder was downloaded as a ZIP (`Model-ROI-AI-main`), download the current ZIP again and extract it to a new folder; `git pull` only works in a Git clone. Preserve your existing folder until the new version starts. Saved runs remain in `~/.modelroi/runs`.
+
+Run the launcher from the new repository folder. The `.streamlit/config.toml` file sets a consistent light theme, and `app/ui/theme.py` provides the visual system. Restart Streamlit after updating theme configuration. In Streamlit Settings, choose the custom application theme if you previously selected Dark manually.
