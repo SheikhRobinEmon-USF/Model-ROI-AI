@@ -20,3 +20,9 @@ Or run `docker compose up --build`, then visit http://localhost:8501 (UI) and ht
 50 reviewed cases and separate holdout; full graders; two provider adapters; persistent transactional spending reservations; cancellation/retry accounting; complete decision engine; comparison/failure/report UI; actual authorized two-provider benchmark; public hosted demo. See [the approved implementation contract](docs/implementation_contract.md).
 
 No provider performance, adoption, or realized ROI is claimed. MIT licensed.
+
+## Additional components
+- Persistent DuckDB reservation ledger with serialized transactions, cancellation, retained unknown liabilities, and restart tests. Not yet connected to paid execution.
+- 50 draft synthetic cases (20 extraction, 20 hospital arithmetic, 10 classification), marked pending human review.
+- Strict JSONL import validation and exact typed JSON graders.
+- 68 passing tests as of this increment. This count includes 50 parametrized draft-case checks and does not establish production readiness.
