@@ -7,6 +7,7 @@ from app.evaluation import run_demo
 from app.providers.local import request, generate
 from app.datasets.validate import validate_jsonl
 from app.execution.local_run import run
+from app.storage.history import save, load, list_runs
 
 st.set_page_config(page_title='ModelROI | Evaluation studio',page_icon='◈',layout='wide')
 st.markdown('''<style>
@@ -83,11 +84,18 @@ elif page=='Benchmark':
                 raise ValueError('Install qwen3:4b first')
             bar=st.progress(0)
             st.session_state.result=run(selected[:count],progress=lambda done,total:bar.progress(done/total))
-            st.success('Run finished. Open Results for the evidence and downloads.')
+            save(st.session_state.result)
+            st.success('Run saved locally. Open Results for the evidence and downloads.')
         except Exception as exc:
             st.error(f'Cannot run benchmark: {type(exc).__name__}. Check Ollama installation and model availability.')
 
 else:
+    if local_enabled:
+        history=list_runs()
+        if history:
+            chosen=st.selectbox('Saved local run',[r['run_id'] for r in history])
+            if st.button('Load saved run'):
+                st.session_state.result=load(chosen)
     result=st.session_state.get('result')
     if not result:
         st.info('Run a mock demo or local benchmark first.')

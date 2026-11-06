@@ -138,6 +138,17 @@ Windows PowerShell: `$env:MODELROI_ENABLE_LOCAL="true"`
 
 macOS/Linux: `export MODELROI_ENABLE_LOCAL=true`
 
-Then run the Streamlit command above. Select Prompt lab to test a prompt, Benchmark to evaluate 1–50 cases, and Results to inspect failures and export JSON/CSV. Public deployments must leave this variable unset/false. Local inference runs on the server hosting Streamlit, not in a visitor's browser. Session results are temporary; download them before closing the session.
+Then run the Streamlit command above. Select Prompt lab to test a prompt, Benchmark to evaluate 1–50 cases, and Results to inspect failures and export JSON/CSV. Public deployments must leave this variable unset/false. Local inference runs on the server hosting Streamlit, not in a visitor's browser. Local benchmark results are persisted under ~/.modelroi/runs; prompt-lab and mock results remain temporary.
 
 This section supersedes earlier statements that the local probe is separate from the dashboard. No real model run has been verified in the development container, which does not have Ollama installed.
+
+## Simplified launcher for your existing Ollama installation
+
+Open Ollama, clone/download this repository, and open a terminal in the repository folder. Run:
+
+- Windows: `py -3.12 scripts/start_local.py`
+- macOS/Linux: `python3.12 scripts/start_local.py`
+
+The launcher checks the local Ollama service, asks before a missing Qwen3 download, creates an isolated Python environment, installs application dependencies, and starts the interface bound to localhost. Keep the terminal open while using the app. It makes no paid API calls. Downloading Python packages and missing model weights requires internet access.
+
+ChatGPT's remote workspace cannot automatically reach Ollama on your personal computer. Running this launcher locally is the supported bridge; you do not need to open firewall ports or share API credentials.

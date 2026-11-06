@@ -40,7 +40,7 @@ The local runner records model digest when supplied by Ollama, dataset SHA-256, 
 
 A 95% Wilson interval accompanies success rates. Latency is machine-specific and exploratory with fewer than 100 observations. No comparative model winner is claimed. Zero provider API fees do not imply zero electricity or hardware cost.
 
-Hospital cases are synthetic arithmetic examples, not independently verified CMS facts. The current graders do not implement the entire financial grounding specification. Run artifacts are held in Streamlit session state; download before ending the session.
+Hospital cases are synthetic arithmetic examples, not independently verified CMS facts. The current graders do not implement the entire financial grounding specification. Local benchmark runs are saved atomically under ~/.modelroi/runs and can be reopened from Results. Prompt-lab and mock results remain session-only.
 
 ## Architecture
 
@@ -60,7 +60,7 @@ The second command requires Ollama and downloaded weights. Simulated provider te
 - Actual Qwen3 run and reviewed output evidence on target hardware.
 - Independently reviewed, diverse labels and untouched holdout.
 - Full financial/citation/refusal graders and recommendation policy.
-- Persistent run history, cancellation, report sanitization and historical-run import.
+- Cancellation, report sanitization and validated external historical-run import.
 - Reproducible dependency locking, container verification, cross-platform CI and public deployment checks.
 
 ## License
@@ -68,3 +68,7 @@ The second command requires Ollama and downloaded weights. Simulated provider te
 Original application code is MIT licensed. Qwen3 4B model artifacts retain their Apache 2.0 license and are downloaded separately. See https://huggingface.co/Qwen/Qwen3-4B/blob/main/LICENSE. Model weights are not bundled with this repository.
 
 The original v2.1 contract remains in docs/implementation_contract.md. The user's subsequent decision to use free local Qwen3 supersedes its paid-provider release requirement; other unmet requirements remain explicitly tracked above.
+
+## Launch with existing Ollama
+
+Open Ollama, then run `python3.12 scripts/start_local.py` on macOS/Linux or `py -3.12 scripts/start_local.py` on Windows. The launcher installs application dependencies and starts the private local interface.
