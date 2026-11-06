@@ -1,32 +1,70 @@
 # ModelROI AI
 
-Outcome-based model evaluation and cost intelligence.
+A local-first evaluation studio for Qwen3 4B. Test prompts, evaluate structured workloads, inspect failures, and download the evidence behind each result.
 
-## Current status
-Working offline foundation preview. This is not a completed MVP. It evaluates five synthetic sentiment cases with a deterministic mock, displays Wilson intervals, and exports the full evidence. Mock timings are not real model latency. Paid execution is disabled.
+**Status: functional development preview, not a validated production release.** Paid APIs are disabled. Real Qwen3 inference has not yet been verified in the development environment. The dataset contains 50 draft synthetic cases pending independent review.
 
-## Run locally
+## Quick start
+
+Install Python 3.12, Git and Ollama, then:
+
 ```bash
-pip install -e '.[dev]'
-pytest -q
-python -m app.evaluation
-streamlit run app/ui/Home.py
-# Separate terminal:
-uvicorn app.api.main:app
+git clone https://github.com/SheikhRobinEmon-USF/Model-ROI-AI.git
+cd Model-ROI-AI
+python -m venv .venv
+# Activate the environment as described in SETUP.md.
+python -m pip install -e '.[dev]'
+ollama pull qwen3:4b
 ```
-Or run `docker compose up --build`, then visit http://localhost:8501 (UI) and http://localhost:8000/docs (API).
 
-## Remaining release requirements
-50 reviewed cases and separate holdout; full graders; two provider adapters; persistent transactional spending reservations; cancellation/retry accounting; complete decision engine; comparison/failure/report UI; actual authorized two-provider benchmark; public hosted demo. See [the approved implementation contract](docs/implementation_contract.md).
+Enable local execution in your terminal:
+- macOS/Linux: `export MODELROI_ENABLE_LOCAL=true`
+- Windows PowerShell: `$env:MODELROI_ENABLE_LOCAL="true"`
 
-No provider performance, adoption, or realized ROI is claimed. MIT licensed.
+Run `python -m streamlit run app/ui/Home.py` and open http://localhost:8501.
 
-## Additional components
-- Persistent DuckDB reservation ledger with serialized transactions, cancellation, retained unknown liabilities, and restart tests. Not yet connected to paid execution.
-- 50 draft synthetic cases (20 extraction, 20 hospital arithmetic, 10 classification), marked pending human review.
-- Strict JSONL import validation and exact typed JSON graders.
-- 68 passing tests as of this increment. This count includes 50 parametrized draft-case checks and does not establish production readiness.
+[Complete Windows, macOS and Linux setup](SETUP.md)
 
-## Free local model direction
+## Interface
 
-Paid APIs are not authorized. Follow [SETUP.md](SETUP.md) for Windows, macOS and Linux instructions, Hugging Face/Ollama models, hardware guidance and the local inference probe. The probe is separate from the mock dashboard; local integration is not yet a completed release.
+- **Overview:** workload summary and instant no-model mock demo.
+- **Prompt lab:** test a bounded prompt against Qwen3 on the host computer.
+- **Benchmark:** select task category and 1–50 cases; run sequentially.
+- **Results:** inspect success counts, Wilson intervals, failures, expected answers and outputs; download JSON/CSV.
+
+The public preview defaults to mock-only mode. Never enable local execution on an unrestricted public server. For a small visitor pilot, use the mock preview until reviewed historical results and publication controls are implemented.
+
+## Evidence and methodology
+
+The local runner records model digest when supplied by Ollama, dataset SHA-256, settings, token counts, UTC start time and per-case elapsed time. Exceptions count as failed cases. Truncated outputs fail grading. Exact JSON checks preserve types; numeric 1 does not equal boolean true.
+
+A 95% Wilson interval accompanies success rates. Latency is machine-specific and exploratory with fewer than 100 observations. No comparative model winner is claimed. Zero provider API fees do not imply zero electricity or hardware cost.
+
+Hospital cases are synthetic arithmetic examples, not independently verified CMS facts. The current graders do not implement the entire financial grounding specification. Run artifacts are held in Streamlit session state; download before ending the session.
+
+## Architecture
+
+Streamlit calls a local sequential evaluation service, which uses the localhost Ollama API and deterministic graders. FastAPI currently provides health and mock-demo endpoints; it does not orchestrate local runs. DuckDB reservation infrastructure is retained for future work but paid execution is unavailable.
+
+## Validation
+
+```bash
+python -m pytest -q
+python -m app.providers.local --model qwen3:4b
+```
+
+The second command requires Ollama and downloaded weights. Simulated provider tests are not evidence of actual model performance. Docker Compose starts the mock UI/API preview; native installation is the documented local-model path.
+
+## Remaining release gates
+
+- Actual Qwen3 run and reviewed output evidence on target hardware.
+- Independently reviewed, diverse labels and untouched holdout.
+- Full financial/citation/refusal graders and recommendation policy.
+- Persistent run history, cancellation, report sanitization and historical-run import.
+- Reproducible dependency locking, container verification, cross-platform CI and public deployment checks.
+
+## License
+
+Original application code is MIT licensed. Qwen3 4B model artifacts retain their Apache 2.0 license and are downloaded separately. See https://huggingface.co/Qwen/Qwen3-4B/blob/main/LICENSE. Model weights are not bundled with this repository.
+
+The original v2.1 contract remains in docs/implementation_contract.md. The user's subsequent decision to use free local Qwen3 supersedes its paid-provider release requirement; other unmet requirements remain explicitly tracked above.

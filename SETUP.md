@@ -129,3 +129,15 @@ Open http://localhost:8501. The current dashboard still runs the five-case mock;
 - https://docs.ollama.com/macos
 - https://docs.ollama.com/linux
 - https://docs.ollama.com/api/chat
+
+## Integrated local interface (latest update)
+
+The Prompt lab and Benchmark pages now support Qwen3 through Ollama when explicitly enabled. Native installation is recommended. Before starting Streamlit:
+
+Windows PowerShell: `$env:MODELROI_ENABLE_LOCAL="true"`
+
+macOS/Linux: `export MODELROI_ENABLE_LOCAL=true`
+
+Then run the Streamlit command above. Select Prompt lab to test a prompt, Benchmark to evaluate 1–50 cases, and Results to inspect failures and export JSON/CSV. Public deployments must leave this variable unset/false. Local inference runs on the server hosting Streamlit, not in a visitor's browser. Session results are temporary; download them before closing the session.
+
+This section supersedes earlier statements that the local probe is separate from the dashboard. No real model run has been verified in the development container, which does not have Ollama installed.
