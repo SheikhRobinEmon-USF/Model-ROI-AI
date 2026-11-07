@@ -162,3 +162,7 @@ Run the launcher from the new repository folder. The `.streamlit/config.toml` fi
 ## Compare three local models
 
 With Ollama running, install `gemma4:e4b` and `phi4-mini:3.8b` using `ollama pull` for each tag. Qwen uses `qwen3:4b`. In Benchmark leave all three selected, choose five cases for a quick check, run the benchmark, then open Results. All categories cycles through workloads so small samples cover multiple task types. Each model receives the same selected inputs. The saved comparison includes every answer and grade.
+
+## Share a live tester session from your Mac
+
+Open Ollama and keep the Mac awake. In your Git clone, run `brew install cloudflared` once, then `python3 scripts/start_pilot.py`. This uses the existing .venv from the local launcher. Share the printed HTTPS trycloudflare.com link and tester code privately. Keep Terminal running; Control+C ends the session. Each restart creates a new code and temporary link. The tester interface handles one prompt comparison at a time and holds results in the visitor's session. A Quick Tunnel is a development/testing service. Hosting and model API fees are zero; your computer and network supply inference.
