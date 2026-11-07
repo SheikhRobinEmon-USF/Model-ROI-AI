@@ -158,3 +158,7 @@ ChatGPT's remote workspace cannot automatically reach Ollama on your personal co
 Stop the running app with Control+C. If your folder was downloaded as a ZIP (`Model-ROI-AI-main`), download the current ZIP again and extract it to a new folder; `git pull` only works in a Git clone. Preserve your existing folder until the new version starts. Saved runs remain in `~/.modelroi/runs`.
 
 Run the launcher from the new repository folder. The `.streamlit/config.toml` file sets a consistent light theme, and `app/ui/theme.py` provides the visual system. Restart Streamlit after updating theme configuration. In Streamlit Settings, choose the custom application theme if you previously selected Dark manually.
+
+## Compare three local models
+
+With Ollama running, install `gemma4:e4b` and `phi4-mini:3.8b` using `ollama pull` for each tag. Qwen uses `qwen3:4b`. In Benchmark leave all three selected, choose five cases for a quick check, run the benchmark, then open Results. All categories cycles through workloads so small samples cover multiple task types. Each model receives the same selected inputs. The saved comparison includes every answer and grade.

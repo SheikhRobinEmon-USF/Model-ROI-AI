@@ -19,8 +19,13 @@ def generate(model, prompt):
     if match is None:
         raise ValueError('Model not installed under that exact name; inspect ollama list')
     start = perf_counter()
-    result = request('/api/chat', {'model':model,'messages':[{'role':'user','content':prompt}],
-        'stream':False,'think':False,'options':{'temperature':0,'num_ctx':4096,'num_predict':512}})
+    options = {'temperature': 0, 'num_ctx': 4096, 'num_predict': 512}
+    payload = {'model': model, 'messages': [{'role': 'user', 'content': prompt}],
+               'stream': False, 'options': options}
+    # Phi has no configurable thinking mode.
+    if model.split(':')[0] != 'phi4-mini':
+        payload['think'] = False
+    result = request('/api/chat', payload)
     if not result.get('done'):
         raise ValueError('Incomplete local generation')
     return {'evidence_type':'local_inference','model_id':result.get('model',model),
@@ -28,7 +33,7 @@ def generate(model, prompt):
         'input_tokens':result.get('prompt_eval_count'),'output_tokens':result.get('eval_count'),
         'latency_ms':(perf_counter()-start)*1000,'provider_api_cost_usd':0,
         'total_compute_cost_usd':None,'cost_note':'Local electricity and hardware cost not measured',
-        'done_reason':result.get('done_reason'),'settings':{'temperature':0,'num_ctx':4096,'num_predict':512,'think':False}}
+        'done_reason':result.get('done_reason'),'settings':{**options,'think':payload.get('think')}}
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()

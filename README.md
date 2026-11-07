@@ -72,3 +72,6 @@ The original v2.1 contract remains in docs/implementation_contract.md. The user'
 ## Launch with existing Ollama
 
 Open Ollama, then run `python3.12 scripts/start_local.py` on macOS/Linux or `py -3.12 scripts/start_local.py` on Windows. The launcher installs application dependencies and starts the private local interface.
+
+### Three-model benchmark
+Compare Qwen3 4B, Gemma 4 E4B and Phi-4-mini on matched cases. Benchmark supports one to three models. Results for multi-model runs include pass rates, median response times, case-level disagreements, side-by-side answers, Wilson intervals and Holm-adjusted exact paired tests. All execution is local.
