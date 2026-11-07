@@ -15,3 +15,11 @@ def test_no_automatic_download_or_fallback():
         with pytest.raises(ValueError,match='not installed'):
             generate('absent','hello')
         assert call.call_count==1
+
+def test_phi_alias_is_used_for_dispatch():
+    with patch('app.providers.local.request', side_effect=[
+        {'models':[{'name':'phi4-mini:latest','digest':'installed'}]},
+        {'done':True,'model':'phi4-mini:latest','message':{'content':'hello'}}
+    ]) as call:
+        assert generate('phi4-mini:3.8b','question')['model_digest']=='installed'
+        assert call.call_args.args[1]['model']=='phi4-mini:latest'

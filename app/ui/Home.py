@@ -4,7 +4,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 from app.evaluation import run_demo
-from app.providers.local import request, generate
+from app.providers.local import request, installed_match
+from app.ui import prompt_compare
 from app.datasets.validate import validate_jsonl
 from app.execution.local_run import run
 from app.storage.history import save, load, list_runs
@@ -56,27 +57,14 @@ if page=='Overview':
         st.success('Mock completed. Open Results to inspect it.')
 
 elif page=='Prompt lab':
-    st.write('Your prompt is sent to Ollama on this machine. No cloud provider is contacted.')
-    if not local_enabled:
-        st.info('Enable local execution using the instructions in SETUP.md.')
-    model=st.selectbox('Model',list(MODELS),format_func=MODELS.get)
-    prompt=st.text_area('Prompt',value='Extract invoice_id and amount as strings. Invoice INV-101, total USD 42.50. Return only JSON.',height=180,max_chars=8000)
-    if st.button(f'Generate with {MODELS[model]}',type='primary',disabled=not local_enabled or not prompt.strip()):
-        try:
-            with st.spinner('Generating locally…'):
-                result=generate(model,prompt)
-            st.session_state.prompt_result=result
-        except Exception as exc:
-            st.error(f'Local inference failed ({type(exc).__name__}). Check that Ollama is running and {model} is installed.')
-    if 'prompt_result' in st.session_state:
-        result=st.session_state.prompt_result
-        st.subheader('Model response · '+result['model_id'])
-        st.code(result['output'],language=None)
-        st.caption(f"Elapsed: {result['latency_ms']/1000:.2f}s • Output tokens: {result['output_tokens']}")
-        with st.expander('Provenance and settings'):
-            st.json(result)
+    prompt_compare.panel(local_enabled)
 
 elif page=='Benchmark':
+    choices = ['My question', 'Built-in graded cases']
+    source = st.radio('Benchmark workload', choices, index=0 if st.session_state.get('last_question') else 1, horizontal=True)
+    if source == 'My question':
+        prompt_compare.panel(local_enabled)
+        st.stop()
     path=Path(__file__).resolve().parents[2]/'datasets/v1/draft_cases.jsonl'
     cases=validate_jsonl(path.read_bytes())
     category=st.selectbox('Workload',['All categories']+sorted({c.task_type for c in cases}))
@@ -90,8 +78,7 @@ elif page=='Benchmark':
     if st.button('Run local benchmark',type='primary',disabled=not local_enabled or not models):
         try:
             installed=request('/api/tags').get('models',[])
-            available={m.get('name') for m in installed}
-            missing=[model for model in models if model not in available]
+            missing=[model for model in models if installed_match(model,installed) is None]
             if missing:
                 st.warning('Install the missing models in Terminal, then run the benchmark again.')
                 st.code('\n'.join('ollama pull '+model for model in missing),language='bash')
@@ -116,6 +103,8 @@ else:
     result=st.session_state.get('result')
     if not result:
         st.info('Run a mock demo or local benchmark first.')
+    elif result.get('evidence_type')=='custom_prompt':
+        prompt_compare.display(result)
     elif result.get('evidence_type')=='matched_local_comparison':
         show(result)
     else:

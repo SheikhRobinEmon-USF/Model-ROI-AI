@@ -13,14 +13,24 @@ def request(path, body=None):
     with build_opener(ProxyHandler({})).open(req, timeout=180) as response:
         return json.load(response)
 
+def installed_match(model, installed):
+    aliases = [model]
+    if model == 'phi4-mini:3.8b':
+        aliases.extend(['phi4-mini:latest', 'phi4-mini'])
+    for alias in aliases:
+        for entry in installed:
+            if alias in (entry.get('name'), entry.get('model')):
+                return entry
+    return None
+
 def generate(model, prompt):
     installed = request('/api/tags').get('models', [])
-    match = next((m for m in installed if m.get('name') == model or m.get('model') == model), None)
+    match = installed_match(model, installed)
     if match is None:
-        raise ValueError('Model not installed under that exact name; inspect ollama list')
+        raise ValueError(f'{model} is not installed. In Terminal run: ollama pull {model}')
     start = perf_counter()
     options = {'temperature': 0, 'num_ctx': 4096, 'num_predict': 512}
-    payload = {'model': model, 'messages': [{'role': 'user', 'content': prompt}],
+    payload = {'model': match.get('name') or match['model'], 'messages': [{'role': 'user', 'content': prompt}],
                'stream': False, 'options': options}
     # Phi has no configurable thinking mode.
     if model.split(':')[0] != 'phi4-mini':
