@@ -6,21 +6,23 @@ from uuid import uuid4
 
 from app.execution.performance import emit, rate_once
 
-from app.graders.quality import rating
+from functools import partial
+from app.providers import hosted
+from app.graders.quality import MODEL, rating
 from app.providers.local import generate, installed_match, request
 from app.storage.history import save
-from app.ui.comparison import MODELS
+from app.ui.comparison import MODELS, ALL_MODELS
 
 
-def evaluate(prompt, models, previous=()):
+def evaluate(prompt, models, previous=(), *, history_chars=None):
     rows = []
     for tag in models:
-        emit("status", phase="generate", message=f"Generating answer with {MODELS[tag]}")
+        emit("status", phase="generate", message=f"Generating answer with {ALL_MODELS[tag]}")
         row = {"requested_model": tag}
         try:
             history = []
             budget = chat_budget()
-            remaining = budget.characters
+            remaining = history_chars or budget.characters
             for turn in previous:
                 prior = next((a.get("output") for a in turn["answers"] if a["requested_model"] == tag), None)
                 if not prior or remaining < 200:
@@ -29,7 +31,8 @@ def evaluate(prompt, models, previous=()):
                 answer = prior[:remaining - len(question)]
                 history[:0] = [{"role": "user", "content": question}, {"role": "assistant", "content": answer}]
                 remaining -= len(question) + len(answer)
-            response = generate(tag, prompt, history) if history else generate(tag, prompt)
+            runner = hosted.generate if tag in hosted.ROUTES else generate
+            response = runner(tag, prompt, history) if history else runner(tag, prompt)
             if history:
                 row["conversation_context"] = history
             row.update(response)
@@ -39,11 +42,13 @@ def evaluate(prompt, models, previous=()):
         rows.append(row)
         emit("answer", row=row.copy())
     return {"run_id": str(uuid4()), "started_at": datetime.now(timezone.utc).isoformat(),
-            "model_id": " / ".join(MODELS[tag] for tag in models),
+            "model_id": " / ".join(ALL_MODELS[tag] for tag in models),
             "evidence_type": "custom_prompt", "prompt": prompt, "answers": rows}
 
 
 def grade_remaining(report):
+    judge = report.get("judge_model", MODEL)
+    grader = partial(rating, model=judge) if judge == hosted.JUDGE else rating
     for row in report["answers"]:
         if not row.get("output", "").strip() or row["status"] == "Error" or "judge" in row:
             continue
@@ -56,14 +61,14 @@ def grade_remaining(report):
             if report.get("reference_answer"):
                 question = json.dumps({"task": question, "reference_answer": report["reference_answer"],
                                        "grading_guidance": "Compare meaning, correctness and completeness against the reference. Accept valid equivalent answers."}, ensure_ascii=False)
-            emit("status", phase="grade", message=f"gpt-oss-20b is grading {MODELS.get(row['requested_model'], row['requested_model'])}")
-            row["judge"] = rate_once(rating, question, row["output"])
+            emit("status", phase="grade", message=f"{judge} is grading {ALL_MODELS.get(row['requested_model'], row['requested_model'])}")
+            row["judge"] = rate_once(grader, question, row["output"])
             if row["status"] == "Truncated":
                 row["judge"]["scope"] += " (partial answer)"
             row.pop("judge_error", None)
             row.pop("judge_split", None)
         except (ValueError, OSError, KeyError) as exc:
-            row["judge_error"] = f"gpt-oss-20b could not score this answer ({exc})."
+            row["judge_error"] = f"{judge} could not score this answer ({exc})."
         emit("answer", row=row.copy())
 
 

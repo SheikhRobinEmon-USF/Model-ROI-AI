@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte'
- type Model={id:string,name:string,installed:boolean}
+ type Model={id:string,name:string,installed:boolean,provider?:string,judge_ready?:boolean}
  const pages=['Prompt lab','Benchmark','Results','History']
  let page=$state('Prompt lab'), models=$state<Model[]>([]), selected=$state<string[]>([]), prompt=$state(''), suite=$state('analytical'), category=$state('all'), count=$state(6), busy=$state(''), error=$state(''), report=$state<any>(null), history=$state<any[]>([]), excerpt=$state(''), fileName=$state(''), caseIndex=$state(0)
  let chatMenu=$state(false), summaryError=$state(''), summarizing=$state('')
@@ -46,7 +46,15 @@
  async function api(path:string,init?:RequestInit){const r=await fetch('/studio/'+path,init);const v=await r.json();if(!r.ok)throw Error(typeof v.detail==='string'?v.detail:'Check your inputs and try again.');return v}
  const post=(v:unknown)=>({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)})
  async function action(label:string,fn:()=>Promise<void>){if(busy)return;busy=label;error='';try{await fn()}catch(e){error=String(e instanceof Error?e.message:e)}finally{busy=''}}
- async function refresh(){await action('Checking Ollama',async()=>{models=await api('models');selected=models.filter(m=>m.installed).map(m=>m.id)})}
+ let mode=$state<'local'|'hosted'>('local')
+ let longContext=$state(false)
+ let visibleModels=$derived(models.filter(m=>mode==='hosted'?!!m.provider:!m.provider))
+ let focused=$state<Record<string,string>>({})
+ function switchMode(value:'local'|'hosted'){
+   mode=value
+   selected=models.filter(m=>m.installed&&(value==='hosted'?!!m.provider:!m.provider)).slice(0,value==='hosted'?3:2).map(m=>m.id)
+ }
+ async function refresh(){await action('Checking model availability',async()=>{models=await api('models');switchMode(mode)})}
  let feed=$state<HTMLElement>(), editor=$state<HTMLTextAreaElement>(), copied=$state<number|null>(null)
  async function bottom(){await tick();if(feed)feed.scrollTop=feed.scrollHeight}
  function remember(id?:string){try{if(id)localStorage.setItem('modelroi-chat',id);else localStorage.removeItem('modelroi-chat')}catch{}}
@@ -57,7 +65,7 @@
      const prior=await api('history/'+chain[0].parent_id)
      seen.add(prior.run_id);chain.unshift(prior)
    }
-   newChat();turns=chain;report=last;remember(last.run_id);await bottom()
+   newChat();switchMode(last.judge_model==='openai/gpt-oss-120b'?'hosted':'local');turns=chain;report=last;remember(last.run_id);await bottom()
  }
  async function copyPrompt(text:string,index:number){try{await navigator.clipboard.writeText(text);copied=index}catch{error='Clipboard unavailable. Select the prompt text to copy it.'}}
  onMount(async()=>{await refresh();await action('Loading chat history',async()=>{history=await api('history')});const id=localStorage.getItem('modelroi-chat');if(id)await action('Restoring chat',async()=>resume(await api('history/'+id)))})
@@ -69,7 +77,7 @@
  const isPrompt=page==='Prompt lab'
  visited=[];stage('prepare')
  const path=isPrompt?'prompt':'benchmark'
- const payload=isPrompt?{models:selected,prompt:input,reference_answer:reference.trim(),parent_id:turns.at(-1)?.run_id??null}:{models:selected,suite,count,category}
+ const payload=isPrompt?{models:selected,prompt:input,long_context:mode==='hosted'&&longContext,reference_answer:reference.trim(),parent_id:turns.at(-1)?.run_id??null}:{models:selected,suite,count,category}
  const turnIndex=turns.length
  const partial:any={prompt:input,answers:[],started_at:new Date().toISOString()}
  if(isPrompt){turns=[...turns,partial];copied=null;await bottom()}
@@ -109,6 +117,12 @@
 <p class="muted">The judges gave different ratings after peer review. Final grade pending agreement.</p>
 {#each split.reviews as review}<p><strong>{review.model} · {review.score}/10</strong><br>{review.reason}</p>{/each}
 {/snippet}
+{#snippet modeSwitch()}
+<div class="mode-switch" aria-label="Inference location">{#each ['local','hosted'] as value}<button disabled={!!busy} aria-pressed={mode===value} onclick={()=>switchMode(value as 'local'|'hosted')}>{value==='local'?'Local':'Hosted'}</button>{/each}</div>
+{/snippet}
+{#snippet routingNote()}
+{#if mode==='hosted'}<p class="routing-note">Selected providers receive your question, excerpts and conversation context. Groq receives grading evidence and reference answers. Judge · GPT-OSS 120B.{#if !visibleModels.some(m=>m.judge_ready)} Configure GROQ_API_KEY to enable grading.{/if}</p>{/if}
+{/snippet}
 <header><div class="brand"><span class="mark" aria-hidden="true">≋</span>ModelROI</div><span class="studio">Evaluation studio</span><div class="runtime"><i></i> Local workspace</div></header>
 <div class="shell"><nav aria-label="Workspace">
  {#each pages as p,i}<button class:active={p===page} disabled={!!busy} onclick={()=>nav(p)} aria-current={p===page?'page':undefined}><b aria-hidden="true">{['⌘','▥','◩','◷'][i]}</b>{p}</button>{/each}
@@ -130,12 +144,15 @@
 {:else}<button onclick={()=>{editMode='rename';newTitle=chat.title}}>Rename</button><button onclick={()=>manage(chat,chat.pinned?'unpin':'pin')}>{chat.pinned?'Unpin':'Pin'}</button><button onclick={()=>editMode='delete'}>Delete</button>{/if}
 <button onclick={()=>{menu='';editMode=''}}>Cancel</button></div>{/if}</div>{:else}<small>Your conversations will appear here.</small>{/each}</aside>
 <section class="chat-space">
-<div class="chat-tools"><details><summary>Models · {selected.length}</summary><div class="model-menu panel">{#each models as m}<label><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed}> {m.name}</label>{/each}<button disabled={!!busy} onclick={refresh}>Refresh model status</button></div></details>
+<div class="chat-tools">{@render modeSwitch()}<details><summary>Models · {selected.length}</summary><div class="model-menu panel">{#each visibleModels as m}<label><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed}> {m.name}<small>{m.provider??'Ollama'} · {m.installed?'Ready':'Setup needed'}</small></label>{/each}<button disabled={!!busy} onclick={refresh}>Refresh model status</button></div></details>
 <button disabled={!!busy} onclick={newChat}>＋ New chat</button></div>
+{@render routingNote()}
+{#if mode==='hosted'}<label class="context-option"><input type="checkbox" bind:checked={longContext} disabled={!!busy}> Longer chat history · up to 32 turns</label>{/if}
 <div class="chat-feed" bind:this={feed}>
 {#each turns as turn,index}<section class="chat-turn">
 <div class="message">{turn.prompt}</div><div class="message-actions"><button aria-label="Copy prompt" onclick={()=>copyPrompt(turn.prompt,index)}>{copied===index?'Copied':'⧉ Copy'}</button></div>
-<div class="cards">{#each turn.answers as row (row.requested_model)}<article class="response"><strong>{name(row.requested_model)}</strong><pre>{row.output??row.error}</pre>
+{#if turn.answers.length>2}<div class="answer-picker" aria-label="Choose an answer">{#each turn.answers as answer}<button aria-pressed={(focused[index]??turn.answers[0].requested_model)===answer.requested_model} onclick={()=>focused[index]=answer.requested_model}>{name(answer.requested_model)}<small>{answer.judge?answer.judge.score+'/10':answer.status} · {timing(answer.latency_ms)}</small></button>{/each}</div>{/if}
+<div class="cards">{#each turn.answers.filter((a:any)=>turn.answers.length<=2||a.requested_model===(turn.answers.some((v:any)=>v.requested_model===focused[index])?focused[index]:turn.answers[0].requested_model)) as row (row.requested_model)}<article class="response"><strong>{name(row.requested_model)}</strong><pre>{row.output??row.error}</pre>
 <details class="answer-metrics"><summary>Metrics{#if row.judge} · {row.judge.score.toFixed(1)} / 10{/if}</summary>
 <small>Response time · {timing(row.latency_ms)}</small>{#if turn.reference_answer}<details><summary>Grading reference</summary><pre>{turn.reference_answer}</pre></details>{/if}
 {#if row.judge}<p><strong>{row.judge.score.toFixed(1)} / 10</strong></p><meter min="0" max="10" value={row.judge.score} aria-label={name(row.requested_model)+' quality'}></meter><p>{row.judge.reason}</p>
@@ -150,10 +167,10 @@
 </section></div>{/if}
 {#if page==='Benchmark'}<div class="layout"><section class="panel"><fieldset disabled={!!busy}>
 <h2>Workload</h2><label for="suite">Evaluation set</label><select id="suite" bind:value={suite} onchange={()=>{count=5;category="all"}}><option value="analytical">Analytical challenges</option><option value="standard">Built-in graded cases</option></select><label for="category">Task category</label><select id="category" bind:value={category}><option value="all">All categories</option>{#each (suite==="analytical"?["math","coding","case_study"]:["structured_extraction","hospital_finance_qa","instruction_following_classification"]) as c}<option value={c}>{c.replaceAll("_"," ")}</option>{/each}</select><label for="cases">Cases per model</label><input id="cases" type="number" min="1" max={suite==='standard'?50:6} bind:value={count}><p class="muted">Each model receives identical cases. Outputs are checked against the same expected answers.</p>
-</fieldset></section><aside class="panel"><h2>Models</h2><p class="muted">Select local models for this run.</p>
-{#each models as m,i}<label class="model"><span class={'dot d'+i}></span><span>{m.name}<code>{m.id}</code></span><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed}></label>{#if !m.installed}<code>ollama pull {m.id}</code>{/if}{/each}
+</fieldset></section><aside class="panel"><h2>Models</h2>{@render modeSwitch()}{@render routingNote()}
+{#each visibleModels as m,i}<label class="model"><span class={'dot d'+i}></span><span>{m.name}<code>{m.id}</code></span><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed}></label>{#if !m.installed}<code>{m.provider?'Configure '+m.provider+' credentials':'ollama pull '+m.id}</code>{/if}{/each}
 <button class="link" disabled={!!busy} onclick={refresh}>Refresh model status</button><hr>
-<button class="primary" disabled={!!busy||!selected.length||(page==='Prompt lab'&&!prompt.trim())||(page==='Benchmark'&&(!Number.isInteger(count)||count<1||count>(suite==='standard'?50:6)))} onclick={execute}>{page==='Prompt lab'?'Compare answers':'Run benchmark'} →</button><p class="foot">Runs sequentially on your computer.</p></aside></div>{/if}
+<button class="primary" disabled={!!busy||!selected.length||(page==='Prompt lab'&&!prompt.trim())||(page==='Benchmark'&&(!Number.isInteger(count)||count<1||count>(suite==='standard'?50:6)))} onclick={execute}>{page==='Prompt lab'?'Compare answers':'Run benchmark'} →</button><p class="foot">Runs sequentially · {mode==='local'?'Ollama':'provider APIs'}</p></aside></div>{/if}
 {:else if page==='History'}
 <section class="panel"><h2>Benchmark trends</h2>
 <button disabled={!!busy} onclick={()=>action('Analyzing saved benchmarks',async()=>{analytics=await api('analytics/benchmarks')})}>{analytics?'Refresh benchmark statistics':'Analyze saved benchmarks'}</button>
@@ -163,8 +180,8 @@
 {#each history as h}<button class="history" disabled={!!busy} onclick={()=>action('Opening run',async()=>{report=await api('history/'+h.run_id);caseIndex=0;page='Results'})}><strong>{h.model_id}</strong><span>{new Date(h.started_at).toLocaleString()} →</span></button>{:else}<p class="panel">Your saved comparisons will appear here after your first run.</p>{/each}
 {:else if !report}<p class="panel">Run a comparison or open a saved result from History.</p>
 {:else}
-<section class="panel" aria-label="Comparison summary"><h2>Comparison summary</h2><small>OpenAI · gpt-oss-20b</small>
-{#if report.comparison_summary}<p>{report.comparison_summary.text}</p>{:else if summarizing===report.run_id}<p role="status"><i class="activity" aria-hidden="true"></i>gpt-oss-20b is writing the comparison…</p>{:else if summaryError}<p>{summaryError}</p><button onclick={()=>readSummary(report)}>Retry summary</button>{/if}</section>
+<section class="panel" aria-label="Comparison summary"><h2>Comparison summary</h2><small>OpenAI · {report.comparison_summary?.model??report.judge_model??'gpt-oss:20b'}</small>
+{#if report.comparison_summary}<p>{report.comparison_summary.text}</p>{:else if summarizing===report.run_id}<p role="status"><i class="activity" aria-hidden="true"></i>The judge is writing the comparison…</p>{:else if summaryError}<p>{summaryError}</p><button onclick={()=>readSummary(report)}>Retry summary</button>{/if}</section>
 <div class="toolbar"><span>{new Date(report.started_at).toLocaleString()}</span><button disabled={!!busy||!report.run_id} onclick={download}>Export JSON ↓</button></div>
 {#if report.answers}
 <button disabled={!!busy} onclick={()=>action("Opening chat",()=>resume(report))}>Continue chat</button><h2>Answer quality</h2><div class="cards">{#each report.answers as row,i}<article class="panel"><small class="modeltitle"><span class={'dot d'+i}></span>{name(row.requested_model)}</small>

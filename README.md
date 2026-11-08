@@ -63,3 +63,7 @@ For the active implementation plan and historical baseline see [the implementati
 SQLite stores saved turns, report details, chat metadata and benchmark measurements in transactions. History lists read indexed summaries without loading full answers. DuckDB powers **History → Analyze saved benchmarks**, calculating pooled pass counts, mean judge grades and median latency across saved runs. The analytics connection closes after the query. See [migration and backup instructions](SETUP.md#local-storage-and-migration).
 
 For a custom grading target, select **Reference answer** in the composer before sending a question. Only the judge receives the reference. Expand the answer’s Metrics to inspect the saved reference. Each model uses its own recent turns as limited conversation context. User messages and references do not train the model weights.
+
+## Hosted model comparison
+
+Choose **Hosted** in Prompt lab or Benchmark to evaluate up to five API responders. The hosted judge is OpenAI GPT-OSS 120B served by Groq. Local mode uses Ollama and its original judge. Each run uses one mode. Answer selectors show the model, grade and observed response time when three or more answers arrive. [Hosted setup and credentials](SETUP.md#hosted-api-mode)

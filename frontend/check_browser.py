@@ -2,19 +2,20 @@ import json
 import os
 from playwright.sync_api import sync_playwright
 models=[dict(id=m,name=n,installed=True) for m,n in [('qwen3:4b','Qwen3 4B'),('gemma4:e4b','Gemma 4 E4B')]]
+remote=[dict(id=n,name=n,provider=n,installed=True,judge_ready=True) for n in ("Google","Groq","OpenRouter","Mistral","Cloudflare")]
 with sync_playwright() as pw:
     b=pw.chromium.launch(executable_path=os.getenv("CHROMIUM_PATH"))
     for width in (1280,390,320):
         p=b.new_page(viewport={'width':width,'height':900})
         errors=[]
         p.on('pageerror',lambda e:errors.append(str(e)))
-        p.route('**/studio/models',lambda r:r.fulfill(json=models))
+        p.route('**/studio/models',lambda r:r.fulfill(json=models+remote))
         saved={}
         p.route('**/studio/history/test*',lambda r:r.fulfill(json=saved[r.request.url.split('/')[-1]]))
         p.route('**/studio/history/*/summary',lambda r:r.fulfill(json={'model':'gpt-oss:20b','text':'Gemma earned the higher grade.'}))
         def comparison(route):
             answers=[dict(requested_model=m['id'],status='Answered',output='Response',latency_ms=200,
-                          judge=dict(score=0 if m==models[0] else 10,reason='Test judge comment.',scope='Quality',criteria={})) for m in models]
+                          judge=dict(score=0 if m==models[0] else 10,reason='Test judge comment.',scope='Quality',criteria={})) for m in models+remote if m["id"] in route.request.post_data_json["models"]]
             report=dict(prompt=route.request.post_data_json['prompt'],started_at='2026-11-08T00:00:00Z',
                         run_id='test2' if saved else 'test',parent_id=route.request.post_data_json.get('parent_id'),answers=answers)
             saved[report['run_id']]=report
@@ -53,6 +54,21 @@ with sync_playwright() as pw:
         p.get_by_label('Evaluation set').select_option('standard')
         assert p.get_by_label('Task category').count()==1
         p.get_by_role('button',name='History').click()
+        p.get_by_role('button',name='Prompt lab').click()
+        p.get_by_role('button',name='New chat').click()
+        p.get_by_role('button',name='Hosted',exact=True).click()
+        p.locator('.chat-tools summary').click()
+        for label in ('Mistral','Cloudflare'):
+            p.get_by_role('checkbox',name=label).check()
+        p.locator('.chat-tools summary').click()
+        editor.fill('Compare all five.')
+        p.get_by_role('button',name='Send').click()
+        picker=p.locator('.answer-picker')
+        picker.get_by_role('button',name='Cloudflare').click()
+        assert picker.locator('button').count()==5
+        assert p.locator('.response').count()==1
+        assert p.locator('.response strong').first.inner_text()=='Cloudflare'
+        assert p.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not errors,errors
         print('Browser verified at',width)
         p.close()

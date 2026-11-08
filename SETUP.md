@@ -178,3 +178,23 @@ Open History and choose **Analyze saved benchmarks** to run DuckDB locally on th
 ### Longer follow-up context on macOS
 
 The default launcher uses extended mode. Run `python3 scripts/start_local.py` to include up to 12 earlier turns and 8,000 characters of combined history per candidate. A follow-up carrying history requests an 8,192-token window from Ollama. Standard mode uses six turns, 3,200 characters and 4,096 tokens. Prior user questions are individually capped at 2,000 characters in extended mode and 800 in standard mode. Recent turns take priority. The full saved transcript stays available in both modes. Use `MODELROI_CHAT_CONTEXT=standard python3 scripts/start_local.py` for the smaller memory budget.
+
+## Hosted API mode
+
+Use free-tier projects with billing disabled or a provider-side spending cap where available. The studio uses fixed routes and has no paid-model fallback. An API key attached to a billed account can incur provider charges. Verify the account tier before running a workload.
+
+Configure credentials in the environment of the launcher. On macOS zsh, for example, use `read -rs "GROQ_API_KEY?Groq key: "; export GROQ_API_KEY` to enter a key privately. Repeat with the appropriate variable for each selected service. Keys stay on the FastAPI server. Do not commit keys or paste them into chat.
+
+| Provider | Server variable | Hosted responder |
+|---|---|---|
+| Google Gemini | GEMINI_API_KEY | gemini-3.5-flash-lite |
+| Groq | GROQ_API_KEY | qwen/qwen3.8-27b |
+| OpenRouter | OPENROUTER_API_KEY | google/gemma-4-26b-a4b-it:free |
+| Mistral | MISTRAL_API_KEY | mistral-small-latest |
+| Cloudflare | CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID | @cf/meta/llama-3.3-70b-instruct-fp8-fast |
+
+The Groq key also enables the independent judge and Results summary (`openai/gpt-oss-120b`). Use a Cloudflare token scoped to Workers AI. From the clone, run `python3 scripts/start_local.py --hosted` (Windows: `py -3.12 scripts/start_local.py --hosted`) to skip Ollama startup checks. Select **Hosted**, then **Models**. Ready means credentials are configured; account access is checked when a request runs.
+
+Providers receive the current prompt, shared excerpts and their own prior conversation. Grading sends the answer, task, relevant context and optional reference to Groq. The summary sends labeled report evidence to Groq. The longer history option considers up to 32 turns and 24,000 characters per responder, subject to service quotas. By default history uses the common local comparison budget. A candidate newly added mid-chat has no earlier answers of its own.
+
+Start with one prompt before a benchmark. Dispatch is sequential and answers appear individually. End-to-end timings include network and provider processing. A short provider-supplied Retry-After on HTTP 429 is retried once. Regrade saved prompt answers if the judge quota expires. Quotas, availability and aliases can change; Mistral's latest alias can change its underlying revision.

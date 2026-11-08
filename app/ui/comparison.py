@@ -7,8 +7,10 @@ from uuid import uuid4
 
 from app.evaluation import paired_exact, percentile
 from app.execution.local_run import run
+from app.providers.hosted import ROUTES
 
 MODELS = {"qwen3:4b": "Qwen3 4B", "gemma4:e4b": "Gemma 4 E4B"}
+ALL_MODELS = {**MODELS, **{model: route.label for model, route in ROUTES.items()}}
 COLORS = ["#247969", "#9952a8", "#3067ac"]
 
 
@@ -20,18 +22,18 @@ def mix_workloads(cases):
 
 
 def compare(cases, models, progress=None, generate_fn=None):
-    if len(set(models)) != len(models) or len(models) != 2 or not cases:
+    if len(set(models)) != len(models) or not 2 <= len(models) <= 5 or not cases:
         raise ValueError("Select two different models and at least one case.")
     runs = []
     for index, model in enumerate(models):
-        if model not in MODELS:
+        if model not in ALL_MODELS:
             raise ValueError("Unsupported model")
         def update(done, total):
             if progress:
-                progress((index * total + done) / (len(models) * total), MODELS[model])
+                progress((index * total + done) / (len(models) * total), ALL_MODELS[model])
         runs.append(run(cases, model=model, progress=update, generate_fn=generate_fn))
     return {"run_id": str(uuid4()), "started_at": runs[0]["started_at"],
-            "model_id": " / ".join(MODELS[m] for m in models),
+            "model_id": " / ".join(ALL_MODELS[m] for m in models),
             "evidence_type": "matched_local_comparison", "runs": runs}
 
 

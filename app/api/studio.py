@@ -17,6 +17,8 @@ from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
+from functools import partial
+from app.providers import hosted
 from app.graders.quality import rating, comparison_summary
 from app.datasets.analytical import analytical_cases
 from app.datasets.attachments import extract
@@ -53,14 +55,15 @@ def exclusive():
 
 
 class Settings(BaseModel):
-    models: list[str] = Field(min_length=1,max_length=2)
+    models: list[str] = Field(min_length=1,max_length=5)
     @model_validator(mode="after")
     def known_models(self):
-        if len(set(self.models)) != len(self.models) or set(self.models)-MODELS.keys():
+        if len(set(self.models)) != len(self.models) or (not set(self.models) <= MODELS.keys() and not set(self.models) <= hosted.ROUTES.keys()):
             raise ValueError("Select distinct supported models.")
         return self
 
 class Question(Settings):
+    long_context: bool = False
     reference_answer: str = Field(default="", max_length=4000)
     parent_id: UUID | None = None
     prompt: str = Field(min_length=1,max_length=8000)
@@ -74,24 +77,35 @@ class Benchmark(Settings):
 def models():
     try:
         tags = request("/api/tags").get("models",[])
-    except OSError as exc:
-        raise HTTPException(503,"Open Ollama and refresh model status.") from exc
-    return [{"id":tag,"name":name,"installed":bool(installed_match(tag,tags))} for tag,name in MODELS.items()]
+    except OSError:
+        tags = []
+    return [{"id":tag,"name":name,"installed":bool(installed_match(tag,tags))} for tag,name in MODELS.items()] + [
+        {"id": tag, "name": route.label, "provider": route.provider, "installed": hosted.configured(route),
+         "judge_ready": hosted.configured(hosted.JUDGE_ROUTE)} for tag, route in hosted.ROUTES.items()]
 
 @router.post("/prompt")
 def prompt(body: Question):
     with exclusive():
         previous = []
         parent = body.parent_id
-        while parent and len(previous) < chat_budget().turns:
+        if body.long_context and body.models[0] not in hosted.ROUTES:
+            raise HTTPException(422, "Long hosted context requires hosted responders.")
+        max_turns = 32 if body.long_context else chat_budget().turns
+        while parent and len(previous) < max_turns:
             turn = saved(parent)
             if turn.get("evidence_type") != "custom_prompt":
                 raise HTTPException(422, "Choose a previous chat turn.")
             previous.append(turn)
             parent = turn.get("parent_id")
         emit("status", phase="prepare", message="Preparing the prompt and conversation context")
-        result = (evaluate(body.prompt, body.models, previous) if previous
-                  else evaluate(body.prompt, body.models))
+        if body.long_context:
+            result = evaluate(body.prompt, body.models, previous, history_chars=24000)
+            result["context_mode"] = "hosted_long"
+        else:
+            result = (evaluate(body.prompt, body.models, previous) if previous
+                      else evaluate(body.prompt, body.models))
+        if body.models[0] in hosted.ROUTES:
+            result["judge_model"] = hosted.JUDGE
         if body.reference_answer.strip():
             result["reference_answer"] = body.reference_answer.strip()
         if body.parent_id:
@@ -112,11 +126,19 @@ def benchmark(body: Benchmark):
             raise HTTPException(422,"No cases match that category.")
         cases=mix_workloads(cases)[:body.count]
         emit("status", phase="generate", message="Running the first benchmark case")
+        remote = body.models[0] in hosted.ROUTES
+        runner = hosted.generate if remote else None
         if len(body.models)>1:
-            result=compare(cases,body.models,progress=lambda fraction,model:emit("status",phase="generate",message=f"Evaluating {model} · {fraction:.0%} of generations complete"))
+            result=compare(cases,body.models,generate_fn=runner,progress=lambda fraction,model:emit("status",phase="generate",message=f"Evaluating {model} · {fraction:.0%} of generations complete"))
         else:
-            result=run(cases,model=body.models[0],progress=lambda done,total:emit("status",phase="generate",message=f"Evaluated {done} of {total} cases"))
+            result=run(cases,model=body.models[0],generate_fn=runner,progress=lambda done,total:emit("status",phase="generate",message=f"Evaluated {done} of {total} cases"))
+        if remote:
+            result["judge_model"] = hosted.JUDGE
+            result["evidence_type"] = "hosted_benchmark"
+        grader = partial(rating, model=hosted.JUDGE) if remote else rating
         for model_run in result.get("runs", [result]):
+            if remote:
+                model_run.update(evidence_type="hosted_benchmark", provider_api_cost_usd=None)
             scores = []
             for index, row in enumerate(model_run["results"], 1):
                 if not row.get("output", "").strip():
@@ -126,7 +148,7 @@ def benchmark(body: Benchmark):
                     task = row["input"]
                     if row.get("done_reason") == "length":
                         task += "\nEvaluator note: the delivered answer was truncated."
-                    row["judge"] = rate_once(rating, task, row["output"])
+                    row["judge"] = rate_once(grader, task, row["output"])
                     scores.append(row["judge"]["score"])
                 except (ValueError, OSError, KeyError) as exc:
                     row["judge_error"] = str(exc)
