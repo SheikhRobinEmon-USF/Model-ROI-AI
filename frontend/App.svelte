@@ -3,8 +3,7 @@
  type Model={id:string,name:string,installed:boolean}
  const pages=['Prompt lab','Benchmark','Results','History']
  let page=$state('Prompt lab'), models=$state<Model[]>([]), selected=$state<string[]>([]), prompt=$state(''), suite=$state('analytical'), category=$state('all'), count=$state(6), busy=$state(''), error=$state(''), report=$state<any>(null), history=$state<any[]>([]), excerpt=$state(''), fileName=$state(''), caseIndex=$state(0)
- let turns=$state<any[]>([]), inspected=$state<number|null>(null)
- let metrics=$derived(inspected===null?null:turns[inspected])
+ let turns=$state<any[]>([])
  const name=(id:string)=>models.find(m=>m.id===id)?.name??id
  const timing=(n:number)=>Number.isFinite(n)?(n/1000).toFixed(2)+' s':'Unavailable'
  async function api(path:string,init?:RequestInit){const r=await fetch('/studio/'+path,init);const v=await r.json();if(!r.ok)throw Error(typeof v.detail==='string'?v.detail:'Check your inputs and try again.');return v}
@@ -14,7 +13,7 @@
  let feed=$state<HTMLElement>(), editor=$state<HTMLTextAreaElement>(), copied=$state<number|null>(null)
  async function bottom(){await tick();if(feed)feed.scrollTop=feed.scrollHeight}
  function remember(id?:string){try{if(id)localStorage.setItem('modelroi-chat',id);else localStorage.removeItem('modelroi-chat')}catch{}}
- function newChat(){page='Prompt lab';turns=[];inspected=null;copied=null;prompt='';fileName='';excerpt='';error='';remember();tick().then(()=>editor?.focus())}
+ function newChat(){page='Prompt lab';turns=[];copied=null;prompt='';fileName='';excerpt='';error='';remember();tick().then(()=>editor?.focus())}
  async function resume(last:any){
    const chain=[last], seen=new Set([last.run_id])
    while(chain[0].parent_id && !seen.has(chain[0].parent_id)){
@@ -86,18 +85,19 @@
 <button disabled={!!busy} onclick={newChat}>＋ New chat</button></div>
 <div class="chat-feed" bind:this={feed}>
 {#each turns as turn,index}<section class="chat-turn">
-<div class="message">{turn.prompt}</div><div class="message-actions"><button aria-label="Copy prompt" onclick={()=>copyPrompt(turn.prompt,index)}>{copied===index?'Copied':'⧉ Copy'}</button><button aria-label="View metrics" onclick={()=>inspected=index}>▥ Metrics</button></div>
-<div class="cards">{#each turn.answers as row}<article class="response"><strong>{name(row.requested_model)}</strong><pre>{row.output??row.error}</pre></article>{/each}</div>
+<div class="message">{turn.prompt}</div><div class="message-actions"><button aria-label="Copy prompt" onclick={()=>copyPrompt(turn.prompt,index)}>{copied===index?'Copied':'⧉ Copy'}</button></div>
+<div class="cards">{#each turn.answers as row (row.requested_model)}<article class="response"><strong>{name(row.requested_model)}</strong><pre>{row.output??row.error}</pre>
+<details class="answer-metrics"><summary>Metrics{#if row.judge} · {row.judge.score.toFixed(1)} / 10{/if}</summary>
+<small>Response time · {timing(row.latency_ms)}</small>
+{#if row.judge}<p><strong>{row.judge.score.toFixed(1)} / 10</strong></p><meter min="0" max="10" value={row.judge.score} aria-label={name(row.requested_model)+' quality'}></meter><p>{row.judge.reason}</p>
+{:else if row.judge_split}{@render splitRating(row.judge_split)}{#if row.judge_error}<p>{row.judge_error}</p>{/if}{:else}<p>{row.judge_error??row.error??'Awaiting grading'}</p>{/if}
+{#if turn.run_id && !row.judge && row.output}<button disabled={!!busy} onclick={()=>action('Retrying grades',async()=>{const updated=await api('history/'+turn.run_id+'/grade',post({}));turns[index]=updated;report=updated})}>Retry ungraded answers</button>{/if}
+</details></article>{/each}</div>
 </section>{:else}<h2 class="chat-empty">What would you like to compare?</h2>{/each}</div>
 <div class="composer"><textarea id="question" aria-label="What should the models solve?" bind:this={editor} bind:value={prompt} maxlength="8000" rows="2" placeholder={turns.length?'Ask a follow-up…':'Message the models…'} disabled={!!busy} onkeydown={(e)=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();if(prompt.trim()&&selected.length&&!busy)execute()}}}></textarea>
 {#if fileName}<details><summary>{fileName}</summary><textarea aria-label="File excerpt" bind:value={excerpt}></textarea><button onclick={()=>{fileName='';excerpt=''}}>Remove attachment</button></details>{/if}
 <div class="composer-actions"><label class="attach-chat">＋ Attach<input disabled={!!busy} type="file" onchange={attach}></label><button class="send" disabled={!!busy||!selected.length||!prompt.trim()} onclick={execute}>Send ↑</button></div></div>
 </section>{/if}
-{#if page==='Prompt lab' && metrics}<aside class="metrics panel" aria-label="Performance metrics"><button onclick={()=>inspected=null}>Close metrics</button><h2>Answer quality</h2><p class="metric-prompt">{metrics.prompt}</p>
-{#each metrics.answers as row}<section><h3>{name(row.requested_model)}</h3><small>Response time · {timing(row.latency_ms)}</small>
-{#if row.judge}<p><strong>{row.judge.score.toFixed(1)} / 10</strong></p><meter min="0" max="10" value={row.judge.score} aria-label={name(row.requested_model)+' quality'}></meter><p>{row.judge.reason}</p>
-{:else if row.judge_split}{@render splitRating(row.judge_split)}{#if row.judge_error}<p>{row.judge_error}</p>{/if}{:else}<p>{row.judge_error??row.error??'Awaiting grading'}</p>{/if}</section>{/each}
-{#if metrics.run_id && metrics.answers.some((r:any)=>!r.judge&&r.output)}<button disabled={!!busy} onclick={()=>action('Retrying grades',async()=>{const index=inspected!;const updated=await api('history/'+turns[index].run_id+'/grade',post({}));turns[index]=updated;report=updated})}>Retry grading</button>{/if}</aside>{/if}
 {#if page==='Benchmark'}<div class="layout"><section class="panel"><fieldset disabled={!!busy}>
 <h2>Workload</h2><label for="suite">Evaluation set</label><select id="suite" bind:value={suite} onchange={()=>{count=5;category="all"}}><option value="analytical">Analytical challenges</option><option value="standard">Built-in graded cases</option></select><label for="category">Task category</label><select id="category" bind:value={category}><option value="all">All categories</option>{#each (suite==="analytical"?["math","coding","case_study"]:["structured_extraction","hospital_finance_qa","instruction_following_classification"]) as c}<option value={c}>{c.replaceAll("_"," ")}</option>{/each}</select><label for="cases">Cases per model</label><input id="cases" type="number" min="1" max={suite==='standard'?50:6} bind:value={count}><p class="muted">Each model receives identical cases. Outputs are checked against the same expected answers.</p>
 </fieldset></section><aside class="panel"><h2>Models</h2><p class="muted">Select local models for this run.</p>
