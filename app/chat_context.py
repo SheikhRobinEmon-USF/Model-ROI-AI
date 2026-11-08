@@ -11,7 +11,7 @@ class ContextBudget(NamedTuple):
 
 
 def chat_budget():
-    mode = os.environ.get("MODELROI_CHAT_CONTEXT", "standard").strip().lower()
+    mode = os.environ.get("MODELROI_CHAT_CONTEXT", "extended").strip().lower()
     if mode == "extended":
         return ContextBudget(12, 8000, 2000, 8192)
     if mode == "standard":
