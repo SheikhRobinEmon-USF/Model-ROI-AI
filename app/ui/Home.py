@@ -60,21 +60,30 @@ elif page=='Prompt lab':
     prompt_compare.panel(local_enabled)
 
 elif page=='Benchmark':
-    choices = ['My question', 'Built-in graded cases']
+    choices = ['My question', 'Built-in graded cases', 'Analytical challenges']
     source = st.radio('Benchmark workload', choices, index=0 if st.session_state.get('last_question') else 1, horizontal=True)
     if source == 'My question':
         prompt_compare.panel(local_enabled)
         st.stop()
     path=Path(__file__).resolve().parents[2]/'datasets/v1/draft_cases.jsonl'
-    cases=validate_jsonl(path.read_bytes())
-    category=st.selectbox('Workload',['All categories']+sorted({c.task_type for c in cases}))
+    if source == 'Analytical challenges':
+        from app.datasets.analytical import analytical_cases
+        cases = analytical_cases()
+        st.write('Score one point per problem when every requested field matches the answer key. Errors and truncated answers receive zero.')
+        topic = st.selectbox('Challenge type', ['All', 'Math', 'Coding', 'Case study'])
+        if topic != 'All':
+            cases = [case for case in cases if case.case_id.startswith(topic.split()[0].lower()+'-')]
+    else:
+        cases=validate_jsonl(path.read_bytes())
+    category='All categories' if source=='Analytical challenges' else st.selectbox('Workload',['All categories']+sorted({c.task_type for c in cases}))
     selected=[c for c in cases if category=='All categories' or c.task_type==category]
     models=st.multiselect('Models to benchmark',list(MODELS),default=list(MODELS),format_func=MODELS.get)
     selected=mix_workloads(selected)
-    count=st.slider('Cases to run',1,len(selected),min(5,len(selected)))
+    count=st.slider('Cases to run',1,len(selected),len(selected) if source=='Analytical challenges' else min(5,len(selected)))
     st.caption('Sequential execution • 4,096-token context • 512-token output limit • No retries')
     st.dataframe(pd.DataFrame([{'Case':c.case_id,'Task':c.task_type,'Review':c.review_status} for c in selected[:count]]),hide_index=True,width='stretch')
-    st.warning('Hospital cases are synthetic arithmetic fixtures, not verified CMS evidence. A full 50-case run can take several minutes on CPU.')
+    if source != 'Analytical challenges':
+        st.warning('Hospital cases are synthetic arithmetic fixtures, not verified CMS evidence. A full 50-case run can take several minutes on CPU.')
     if st.button('Run local benchmark',type='primary',disabled=not local_enabled or not models):
         try:
             installed=request('/api/tags').get('models',[])

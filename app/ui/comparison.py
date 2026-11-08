@@ -69,6 +69,19 @@ def show(report):
         st.write(f"The shortest median response time was {fastest['Median seconds'].iloc[0]:.2f} seconds ({' and '.join(fastest.Model)}).")
     st.caption("Errors count as failed cases. Timing includes model loading when it occurs and uses completed responses only. Short runs give exploratory timing estimates.")
     st.dataframe(frame,hide_index=True)
+    skills = {"math": "Math", "coding": "Coding", "case_study": "Case study"}
+    breakdown = []
+    for item in runs:
+        for skill, label in skills.items():
+            cases = [row for row in item["results"] if row["task_type"] == skill]
+            if cases:
+                breakdown.append({"Skill": label, "Model": MODELS[item["model_id"]],
+                                  "Passed": sum(row["passed"] for row in cases), "Cases": len(cases)})
+    if breakdown:
+        st.subheader("Which problems did each model solve?")
+        st.dataframe(pd.DataFrame(breakdown).pivot(index="Skill", columns="Model", values="Passed"))
+        st.caption("Cells count fully correct solutions in each skill. The full challenge set has two problems per skill.")
+
     by_model={MODELS[r["model_id"]]:{row["case_id"]:row for row in r["results"]} for r in runs}
     ids=list(by_model[names[0]])
     st.subheader("Where did answers differ?")

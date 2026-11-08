@@ -75,3 +75,9 @@ Open Ollama, then run `python3.12 scripts/start_local.py` on macOS/Linux or `py 
 
 ### Three-model benchmark
 Compare Qwen3 4B, Gemma 4 E4B and Phi-4-mini on matched cases. Benchmark supports one to three models. Results for multi-model runs include pass rates, median response times, case-level disagreements, side-by-side answers, Wilson intervals and Holm-adjusted exact paired tests. All execution is local.
+
+### Analytical challenges and file questions
+
+In **Benchmark → Analytical challenges**, compare six scored math, code-tracing/debugging and operations problems. Choose a category or run the whole set. Each problem asks for a JSON answer with explicit fields. The same deterministic answer key grades every model. Use Results to inspect misses and uncertainty.
+
+In **Prompt lab** or **Benchmark → My question**, upload a file, enter a question, preview the excerpt and compare responses. The local launcher installs PDF, modern Office and Excel readers. Legacy binary Word/PowerPoint files require antiword/catppt respectively, or conversion to DOCX/PPTX. Scanned PDFs require prior OCR. Only the displayed excerpt is sent to each model. Local history includes the excerpt. File questions are qualitative unless a separate graded workload is selected.

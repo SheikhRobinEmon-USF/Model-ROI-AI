@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class EvalCase(BaseModel):
     model_config = ConfigDict(extra='forbid')
     case_id: str = Field(min_length=1, max_length=100, pattern=r'^[a-zA-Z0-9_-]+$')
-    task_type: Literal['structured_extraction','hospital_finance_qa','instruction_following_classification']
+    task_type: Literal['structured_extraction','hospital_finance_qa','instruction_following_classification','math','coding','case_study']
     input: str = Field(min_length=1,max_length=20000)
     expected: dict
     grader: Literal['json_exact','classification_exact']

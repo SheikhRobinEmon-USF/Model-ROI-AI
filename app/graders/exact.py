@@ -8,6 +8,8 @@ def grade(case, output):
         return {'passed':False,'reason':'invalid_json'}
     expected = case.expected
     def same(a,b):
+        if case.dataset_version == "analytical-v1" and type(a) in (int, float) and type(b) in (int, float):
+            return a == b
         if type(a) is not type(b):
             return False
         if isinstance(a,dict):
