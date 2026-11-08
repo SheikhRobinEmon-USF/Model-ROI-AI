@@ -13,3 +13,12 @@ def demo():
 @app.post('/v1/runs')
 def paid_run():
     raise HTTPException(403, 'Paid execution is unavailable in this offline preview.')
+
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from app.api.studio import router
+
+app.include_router(router)
+bundle = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if bundle.is_dir():
+    app.mount("/", StaticFiles(directory=bundle, html=True), name="studio")

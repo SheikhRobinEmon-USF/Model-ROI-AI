@@ -31,10 +31,15 @@ def evaluate(prompt, models):
 def grade_remaining(report, reference):
     report["judge_reference"] = reference
     for row in report["answers"]:
-        if row["status"] != "Answered" or "judge" in row:
+        if not row.get("output", "").strip() or row["status"] == "Error" or "judge" in row:
             continue
         try:
-            row["judge"] = rating(report["prompt"], row["output"], reference)
+            question = report["prompt"]
+            if row["status"] == "Truncated":
+                question += "\nEvaluator note: generation stopped at the output limit. Evaluate only the delivered portion and account for missing content."
+            row["judge"] = rating(question, row["output"], reference)
+            if row["status"] == "Truncated":
+                row["judge"]["scope"] += " (partial answer)"
             row.pop("judge_error", None)
         except (ValueError, OSError, KeyError) as exc:
             row["judge_error"] = f"Flow-Judge could not score this answer ({exc})."
@@ -42,7 +47,7 @@ def grade_remaining(report, reference):
 
 def display(report, allow_grading=False):
     st.subheader("Answer quality · Flow-Judge")
-    pending = any(row["status"] == "Answered" and "judge" not in row for row in report["answers"])
+    pending = any(row.get("output") and row["status"] != "Error" and "judge" not in row for row in report["answers"])
     if allow_grading and pending and st.button("Grade saved answers", key="grade_"+report["run_id"]):
         with st.spinner("Grading the existing responses…"):
             grade_remaining(report, report.get("judge_reference", ""))

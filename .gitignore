@@ -223,3 +223,7 @@ __marimo__/
 .pytest_cache/
 *.duckdb
 *.duckdb.wal
+
+/frontend/node_modules/
+!/frontend/dist/
+!/frontend/dist/**

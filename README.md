@@ -81,3 +81,8 @@ Compare Qwen3 4B, Gemma 4 E4B and Phi-4-mini on matched cases. Benchmark support
 In **Benchmark → Analytical challenges**, compare six scored math, code-tracing/debugging and operations problems. Choose a category or run the whole set. Each problem asks for a JSON answer with explicit fields. The same deterministic answer key grades every model. Use Results to inspect misses and uncertainty.
 
 In **Prompt lab** or **Benchmark → My question**, upload a file, enter a question, preview the excerpt and compare responses. The local launcher installs PDF, modern Office and Excel readers. Legacy binary Word/PowerPoint files require antiword/catppt respectively, or conversion to DOCX/PPTX. Scanned PDFs require prior OCR. Only the displayed excerpt is sent to each model. Local history includes the excerpt. File questions are qualitative unless a separate graded workload is selected.
+
+## Local web studio
+The Mac/Windows/Linux launcher now serves a compiled Svelte 5 + TypeScript studio from FastAPI. Run `python3 scripts/start_local.py` after updating your clone. Use the URL printed by the launcher. The browser bundle is included and runs without a Node installation or CDN. The previous Streamlit workspace remains available using the manual instructions in SETUP.md. The tester pilot remains a separate entry point.
+
+Frontend development: from `frontend/`, run `npm ci` and `npm run build`; commit the generated dist folder with source changes.

@@ -5,6 +5,10 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import socket
+import threading
+import time
+import webbrowser
 from urllib.request import build_opener, ProxyHandler
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -32,9 +36,26 @@ def main():
     subprocess.run([str(executable),'-m','pip','install','-e',str(ROOT)],check=True)
     environment=os.environ.copy()
     environment['MODELROI_ENABLE_LOCAL']='true'
-    print('Starting local ModelROI at http://localhost:8501. Press Ctrl+C to stop.')
-    subprocess.run([str(executable),'-m','streamlit','run',str(ROOT/'app/ui/Home.py'),
-                    '--server.address','127.0.0.1'],cwd=ROOT,env=environment,check=True)
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", 8501))
+        except OSError:
+            probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    url = f"http://127.0.0.1:{port}"
+    def open_studio():
+        for _ in range(60):
+            try:
+                with build_opener(ProxyHandler({})).open(url+"/health", timeout=1):
+                    webbrowser.open(url)
+                    return
+            except OSError:
+                time.sleep(0.5)
+    threading.Thread(target=open_studio, daemon=True).start()
+    print(f"Starting ModelROI at {url}. Press Control+C to stop.", flush=True)
+    subprocess.run([str(executable), "-m", "uvicorn", "app.api.main:app",
+                    "--host", "127.0.0.1", "--port", str(port)],
+                   cwd=ROOT, env=environment, check=True)
 
 if __name__=='__main__':
     try:

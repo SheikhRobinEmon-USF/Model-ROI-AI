@@ -1,6 +1,7 @@
 """Rubric evaluation using a separate local Ollama judge."""
 from html import escape
 import re
+import json
 
 from app.providers.local import request
 
@@ -31,7 +32,23 @@ def rating(question, answer, reference=""):
         output = response["message"]["content"].strip()
         match = re.fullmatch(r"<feedback>(.+?)</feedback>\s*<score>\s*([1-5])\s*</score>",output,re.S)
         if not match or not response.get("done") or response.get("done_reason")=="length":
-            raise ValueError("Judge returned an incomplete or unreadable rating.")
+            schema = {"type":"object","required":["score","feedback"],"properties":{
+                "score":{"type":"integer","minimum":1,"maximum":5},"feedback":{"type":"string"}}}
+            retry = request("/api/chat", {"model":JUDGE,"stream":False,"format":schema,
+                "messages":[{"role":"user","content":task.split("Return only <feedback>")[0]
+                             +"Return JSON with integer score and brief feedback."}],
+                "options":{"temperature":0,"num_ctx":8192,"num_predict":512}})
+            if not retry.get("done") or retry.get("done_reason")=="length":
+                raise ValueError("Judge reached the limit during its structured retry.")
+            try:
+                parsed = json.loads(retry["message"]["content"])
+                score, reason = parsed["score"], parsed["feedback"]
+                if type(score) is not int or not 1 <= score <= 5 or not isinstance(reason,str) or not reason.strip():
+                    raise ValueError()
+            except (ValueError, KeyError, TypeError) as exc:
+                raise ValueError("Judge returned invalid feedback after a structured retry.") from exc
+            details[name] = {"rating":score, "reason":reason.strip(), "weight":weight}
+            continue
         details[name] = {"rating":int(match[2]),"reason":match[1].strip(),"weight":weight}
     points = sum((item["rating"]-1)*item["weight"] for item in details.values())
     score = 2.5*points/sum(item["weight"] for item in details.values())
