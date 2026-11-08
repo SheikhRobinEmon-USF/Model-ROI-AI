@@ -11,7 +11,7 @@ import streamlit as st
 from app.evaluation import paired_exact, percentile
 from app.execution.local_run import run
 
-MODELS = {"qwen3:4b": "Qwen3 4B", "gemma4:e4b": "Gemma 4 E4B", "phi4-mini:3.8b": "Phi-4-mini"}
+MODELS = {"qwen3:4b": "Qwen3 4B", "gemma4:e4b": "Gemma 4 E4B"}
 COLORS = ["#247969", "#9952a8", "#3067ac"]
 
 
@@ -44,7 +44,7 @@ def show(report):
     for item in runs:
         rows = item["results"]
         times = [r["latency_ms"]/1000 for r in rows if r["status"] == "completed"]
-        summary.append({"Model": MODELS[item["model_id"]], "Passed": item["successful_cases"],
+        summary.append({"Model": MODELS.get(item["model_id"], item["model_id"]), "Passed": item["successful_cases"],
                         "Attempted": len(rows), "Success (%)": 100*item["success_rate"],
                         "Median seconds": percentile(times,.5), "Responses":len(times),
                         "Wilson low (%)":100*item["wilson_95"][0], "Wilson high (%)":100*item["wilson_95"][1]})
@@ -52,7 +52,7 @@ def show(report):
     names = list(frame["Model"])
     color = alt.Color("Model:N", scale=alt.Scale(domain=list(MODELS.values()),range=COLORS),legend=None)
     st.subheader("How did the models compare?")
-    st.write("Think of three people taking the same quiz. The score shows who answered correctly. The clock shows how long each person typically took.")
+    st.write("Think of people taking the same quiz. The score shows who answered correctly. The clock shows how long each person typically took.")
     left,right = st.columns(2)
     for col,field,title in [(left,"Success (%)","Cases passed · higher is better"),(right,"Median seconds","Typical response time · lower is faster")]:
         col.markdown("**"+title+"**")
@@ -75,14 +75,14 @@ def show(report):
         for skill, label in skills.items():
             cases = [row for row in item["results"] if row["task_type"] == skill]
             if cases:
-                breakdown.append({"Skill": label, "Model": MODELS[item["model_id"]],
+                breakdown.append({"Skill": label, "Model": MODELS.get(item["model_id"], item["model_id"]),
                                   "Passed": sum(row["passed"] for row in cases), "Cases": len(cases)})
     if breakdown:
         st.subheader("Which problems did each model solve?")
         st.dataframe(pd.DataFrame(breakdown).pivot(index="Skill", columns="Model", values="Passed"))
         st.caption("Cells count fully correct solutions in each skill. The full challenge set has two problems per skill.")
 
-    by_model={MODELS[r["model_id"]]:{row["case_id"]:row for row in r["results"]} for r in runs}
+    by_model={MODELS.get(r["model_id"], r["model_id"]):{row["case_id"]:row for row in r["results"]} for r in runs}
     ids=list(by_model[names[0]])
     st.subheader("Where did answers differ?")
     matrix=pd.DataFrame([{"Case":i,**{name:("Error" if by_model[name][i]["status"]=="failed" else "Pass" if by_model[name][i]["passed"] else "Miss") for name in names}} for i in ids])

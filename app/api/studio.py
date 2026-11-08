@@ -16,7 +16,7 @@ from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
-from app.graders.council import SplitDecision, rating
+from app.graders.quality import rating
 from app.datasets.analytical import analytical_cases
 from app.datasets.attachments import extract
 from app.datasets.validate import validate_jsonl
@@ -52,7 +52,7 @@ def exclusive():
 
 
 class Settings(BaseModel):
-    models: list[str] = Field(min_length=1,max_length=3)
+    models: list[str] = Field(min_length=1,max_length=2)
     @model_validator(mode="after")
     def known_models(self):
         if len(set(self.models)) != len(self.models) or set(self.models)-MODELS.keys():
@@ -108,7 +108,7 @@ def benchmark(body: Benchmark):
             result=compare(cases,body.models,progress=lambda fraction,model:emit("status",message=f"Evaluating {model} · {fraction:.0%} of generations complete"))
         else:
             result=run(cases,model=body.models[0],progress=lambda done,total:emit("status",message=f"Evaluated {done} of {total} cases"))
-        emit("status",message="Scoring benchmark answers with Flow-Judge + gpt-oss-20b")
+        emit("status",message="Scoring benchmark answers with gpt-oss-20b")
         for model_run in result.get("runs", [result]):
             scores = []
             for row in model_run["results"]:
@@ -120,9 +120,6 @@ def benchmark(body: Benchmark):
                         task += "\nEvaluator note: the delivered answer was truncated."
                     row["judge"] = rate_once(rating, task, row["output"])
                     scores.append(row["judge"]["score"])
-                except SplitDecision as exc:
-                    row["judge_split"] = exc.evidence()
-                    row.pop("judge_error", None)
                 except (ValueError, OSError, KeyError) as exc:
                     row["judge_error"] = str(exc)
             model_run["judge_mean"] = sum(scores) / len(scores) if scores else None

@@ -7,7 +7,7 @@ from app.execution.performance import emit, rate_once
 import pandas as pd
 import streamlit as st
 
-from app.graders.council import SplitDecision, rating
+from app.graders.quality import rating
 from app.providers.local import generate, installed_match, request
 from app.storage.history import save
 from app.ui.comparison import MODELS
@@ -53,17 +53,14 @@ def grade_remaining(report):
                 question = json.dumps(row["conversation_context"], ensure_ascii=False) + "\nCurrent question: " + question
             if row["status"] == "Truncated":
                 question += "\nEvaluator note: generation stopped at the output limit. Evaluate only the delivered portion and account for missing content."
-            emit("status", message=f"Grading {MODELS[row['requested_model']]}")
+            emit("status", message=f"Grading {MODELS.get(row['requested_model'], row['requested_model'])}")
             row["judge"] = rate_once(rating, question, row["output"])
             if row["status"] == "Truncated":
                 row["judge"]["scope"] += " (partial answer)"
             row.pop("judge_error", None)
             row.pop("judge_split", None)
-        except SplitDecision as exc:
-            row["judge_split"] = exc.evidence()
-            row.pop("judge_error", None)
         except (ValueError, OSError, KeyError) as exc:
-            row["judge_error"] = f"Flow-Judge + gpt-oss-20b could not score this answer ({exc})."
+            row["judge_error"] = f"gpt-oss-20b could not score this answer ({exc})."
         emit("answer", row=row.copy())
 
 
@@ -75,7 +72,7 @@ def display(report, allow_grading=False):
             grade_remaining(report)
             save(report)
     for row in report["answers"]:
-        name = MODELS[row["requested_model"]]
+        name = MODELS.get(row["requested_model"], row["requested_model"])
         verdict = row.get("judge")
         if verdict:
             st.progress(verdict["score"]/10, text=f"{name} · {verdict['score']:.1f}/10 · {verdict['scope']}")
@@ -93,7 +90,7 @@ def display(report, allow_grading=False):
     st.write(report["prompt"])
     timings = []
     for column, row in zip(st.columns(len(report["answers"])), report["answers"]):
-        name = MODELS[row["requested_model"]]
+        name = MODELS.get(row["requested_model"], row["requested_model"])
         column.markdown(f"**{name}**")
         if row["status"] == "Error":
             column.error(row["error"])
@@ -148,7 +145,7 @@ def panel(enabled):
             st.code("\n".join("ollama pull "+tag for tag in missing), language="bash")
     else:
         st.info("Start the local launcher to compare models on your machine.")
-    st.caption("Flow-Judge + gpt-oss-20b automatically rates each answer out of 10.")
+    st.caption("gpt-oss-20b automatically rates each answer out of 10.")
     if st.button("Compare answers", type="primary", disabled=not enabled or not models or not prompt.strip()):
         with st.spinner("Running the same question through each selected model…"):
             report = evaluate(prompt, models)

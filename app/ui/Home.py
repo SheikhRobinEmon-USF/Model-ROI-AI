@@ -27,7 +27,7 @@ with st.sidebar:
         st.button(f'{icon}  {label}',key='nav_'+label,type='primary' if st.session_state.page==label else 'secondary',on_click=navigate,args=(label,),use_container_width=True)
     st.divider()
     st.caption('MODEL ENVIRONMENT')
-    st.write('Qwen3 · Gemma 4 · Phi-4-mini')
+    st.write('Qwen3 · Gemma 4')
     st.caption('Local execution enabled' if local_enabled else 'Mock preview mode')
     st.caption('Private by default. No paid APIs.')
 page=st.session_state.page

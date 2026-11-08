@@ -7,7 +7,6 @@ Policy updated November 6, 2026: no paid APIs. Use local downloadable weights wi
 | Model | Role | License | Practical starting hardware (estimate, not minimum guarantee) |
 |---|---|---|---|
 | Qwen3 4B, quantized | Default balanced local candidate | Apache 2.0 | 16 GB system RAM preferred |
-| Phi-4-mini, quantized (3.8B) | Independent model-family comparison | MIT | 16 GB system RAM preferred |
 | Qwen3 1.7B, quantized | Lower-memory fallback, same-family baseline | Check exact artifact license before redistribution | 8 GB system RAM starting point |
 
 Use one model at a time and a short context (4,096 tokens). CPU-only works but can be slow. Available memory, quantization and prompt length determine actual fit. Reserve roughly 15 GB free disk for the application and a small model pair, then check download sizes. These are planning estimates. No accuracy or latency ranking has been measured for this project.
@@ -65,7 +64,8 @@ If the Ollama service is not running, run `ollama serve` in another terminal. GP
 
 ```text
 ollama pull qwen3:4b
-ollama pull phi4-mini
+ollama pull gemma4:e4b
+ollama pull gpt-oss:20b
 ollama list
 ollama run qwen3:4b
 ```
@@ -121,10 +121,8 @@ Open http://localhost:8501. The current dashboard still runs the five-case mock;
 
 - https://huggingface.co/Qwen/Qwen3-4B
 - https://huggingface.co/Qwen/Qwen3-4B-GGUF
-- https://huggingface.co/microsoft/Phi-4-mini-instruct
 - https://huggingface.co/docs/hub/ollama
 - https://ollama.com/library/qwen3
-- https://ollama.com/library/phi4-mini
 - https://docs.ollama.com/windows
 - https://docs.ollama.com/macos
 - https://docs.ollama.com/linux
@@ -159,16 +157,13 @@ Stop the running app with Control+C. If your folder was downloaded as a ZIP (`Mo
 
 Run the launcher from the new repository folder. The `.streamlit/config.toml` file sets a consistent light theme, and `app/ui/theme.py` provides the visual system. Restart Streamlit after updating theme configuration. In Streamlit Settings, choose the custom application theme if you previously selected Dark manually.
 
-## Compare three local models
+## Compare two local models
 
-With Ollama running, install `gemma4:e4b` and `phi4-mini:3.8b` using `ollama pull` for each tag. Qwen uses `qwen3:4b`. In Benchmark leave all three selected, choose five cases for a quick check, run the benchmark, then open Results. All categories cycles through workloads so small samples cover multiple task types. Each model receives the same selected inputs. The saved comparison includes every answer and grade.
+With Ollama running, install `gemma4:e4b` using `ollama pull` for each tag. Qwen uses `qwen3:4b`. In Benchmark leave both selected, choose five cases for a quick check, run the benchmark, then open Results. All categories cycles through workloads so small samples cover multiple task types. Each model receives the same selected inputs. The saved comparison includes every answer and grade.
 
 ## Share a live tester session from your Mac
 
 Open Ollama and keep the Mac awake. In your Git clone, run `brew install cloudflared` once, then `python3 scripts/start_pilot.py`. This uses the existing .venv from the local launcher. Share the printed HTTPS trycloudflare.com link and tester code privately. Keep Terminal running; Control+C ends the session. Each restart creates a new code and temporary link. The tester interface handles one prompt comparison at a time and holds results in the visitor's session. A Quick Tunnel is a development/testing service. Hosting and model API fees are zero; your computer and network supply inference.
 
 ### Automatic quality judge
-Run `ollama pull qwen3.8:27b` on the Ollama host. Prompt comparisons automatically send the original question and each delivered answer to this local judge. The judge supplies the displayed 0–10 score and explanation. Scores from previously saved reports retain their original attribution. Built-in benchmark pass rates continue to use their answer keys.
-
-### Collaborative judges
-Install both judges with `ollama pull hf.co/flowaicom/Flow-Judge-v0.1-GGUF:Q4_K_M` and `ollama pull gpt-oss:20b`. Independent grades use a 1–5 rubric mapped to 0–10. Disagreeing judges receive each other's reasoning for one review round. Only exact agreement is published. Persistent disagreement remains unscored. Judges unload after each call to reduce simultaneous memory residency. Existing saved grades retain their earlier judge attribution.
+Run `ollama pull gpt-oss:20b`. The judge grades each delivered answer directly from 0 to 10 and explains the score. Historical reports keep their original grades.
