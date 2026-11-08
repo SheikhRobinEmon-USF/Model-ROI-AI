@@ -32,6 +32,20 @@ def decision(model, task, answer, peer=None):
     return {"model":model,**verdict}
 
 
+class SplitDecision(ValueError):
+    def __init__(self, transcript):
+        super().__init__("Judges disagree after peer review.")
+        self.transcript = transcript
+        self.reviews = [
+            {"model": label, "score": (review["score"] - 1) * 2.5, "reason": review["reason"]}
+            for label, review in zip(("Flow-Judge", "gpt-oss-20b"), transcript[-1]["reviews"], strict=True)
+        ]
+
+    def evidence(self):
+        return {"reviews": self.reviews, "transcript": self.transcript,
+                "mean": sum(review["score"] for review in self.reviews) / 2}
+
+
 def rating(question, answer):
     reviews = [decision(model,question,answer) for model in (FLOW,GPT)]
     transcript = [{"round":1,"reviews":reviews}]
@@ -40,7 +54,7 @@ def rating(question, answer):
         reviews = [decision(model,question,answer,previous[1-index]) for index,model in enumerate((FLOW,GPT))]
         transcript.append({"round":2,"reviews":reviews})
     if reviews[0]["score"] != reviews[1]["score"]:
-        raise ValueError("Judges disagree after peer review. No consensus grade published.")
+        raise SplitDecision(transcript)
     return {"model":"Flow-Judge + gpt-oss-20b","score":(reviews[0]["score"]-1)*2.5,
             "scope":"Two-judge consensus","reason":reviews[1]["reason"],
             "criteria":{},"transcript":transcript,"rubric_version":"council-v2"}

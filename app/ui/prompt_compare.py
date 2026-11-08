@@ -7,7 +7,7 @@ from app.execution.performance import emit, rate_once
 import pandas as pd
 import streamlit as st
 
-from app.graders.council import rating
+from app.graders.council import SplitDecision, rating
 from app.providers.local import generate, installed_match, request
 from app.storage.history import save
 from app.ui.comparison import MODELS
@@ -57,6 +57,10 @@ def grade_remaining(report):
             row["judge"] = rate_once(rating, question, row["output"])
             if row["status"] == "Truncated":
                 row["judge"]["scope"] += " (partial answer)"
+            row.pop("judge_error", None)
+            row.pop("judge_split", None)
+        except SplitDecision as exc:
+            row["judge_split"] = exc.evidence()
             row.pop("judge_error", None)
         except (ValueError, OSError, KeyError) as exc:
             row["judge_error"] = f"Flow-Judge + gpt-oss-20b could not score this answer ({exc})."

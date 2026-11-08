@@ -16,7 +16,7 @@ from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
-from app.graders.council import rating
+from app.graders.council import SplitDecision, rating
 from app.datasets.analytical import analytical_cases
 from app.datasets.attachments import extract
 from app.datasets.validate import validate_jsonl
@@ -120,6 +120,9 @@ def benchmark(body: Benchmark):
                         task += "\nEvaluator note: the delivered answer was truncated."
                     row["judge"] = rate_once(rating, task, row["output"])
                     scores.append(row["judge"]["score"])
+                except SplitDecision as exc:
+                    row["judge_split"] = exc.evidence()
+                    row.pop("judge_error", None)
                 except (ValueError, OSError, KeyError) as exc:
                     row["judge_error"] = str(exc)
             model_run["judge_mean"] = sum(scores) / len(scores) if scores else None

@@ -50,6 +50,12 @@
  function download(){const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='modelroi-'+report.run_id+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
  let runs=$derived(report?.runs??(report?.results?[report]:[]))
 </script>
+{#snippet splitRating(split:any)}
+<p><strong>{split.mean} / 10</strong> · Judge average</p>
+<meter min="0" max="10" value={split.mean} aria-label="Average of the two judge ratings"></meter>
+<p class="muted">The judges gave different ratings after peer review. Final grade pending agreement.</p>
+{#each split.reviews as review}<p><strong>{review.model} · {review.score}/10</strong><br>{review.reason}</p>{/each}
+{/snippet}
 <header><div class="brand"><span class="mark" aria-hidden="true">≋</span>ModelROI</div><span class="studio">Evaluation studio</span><div class="runtime"><i></i> Local workspace</div></header>
 <div class="shell"><nav aria-label="Workspace">
  {#each pages as p,i}<button class:active={p===page} disabled={!!busy} onclick={()=>nav(p)} aria-current={p===page?'page':undefined}><b aria-hidden="true">{['⌘','▥','◩','◷'][i]}</b>{p}</button>{/each}
@@ -63,14 +69,14 @@
 {#each turns as turn,index}
 <section class="thread"><h2>{turn.prompt}</h2><div class="cards">{#each turn.answers as row}
 <article class="panel"><small>{name(row.requested_model)}</small><pre>{row.output??row.error}</pre>
-{#if row.judge}<strong>{row.judge.score.toFixed(1)} / 10</strong><p>{row.judge.reason}</p>{/if}</article>
+{#if row.judge}<strong>{row.judge.score.toFixed(1)} / 10</strong><p>{row.judge.reason}</p>{:else if row.judge_split}{@render splitRating(row.judge_split)}{/if}</article>
 {/each}</div><button onclick={()=>inspected=index}>View metrics</button></section>
 {/each}
 {/if}
 {#if page==='Prompt lab' && metrics}<aside class="metrics panel" aria-label="Performance metrics"><button onclick={()=>inspected=null}>Close metrics</button><h2>Answer quality</h2>
 {#each metrics.answers as row}<section><h3>{name(row.requested_model)}</h3><small>Response time · {timing(row.latency_ms)}</small>
 {#if row.judge}<p><strong>{row.judge.score.toFixed(1)} / 10</strong></p><meter min="0" max="10" value={row.judge.score} aria-label={name(row.requested_model)+' quality'}></meter><p>{row.judge.reason}</p>
-{:else}<p>{row.judge_error??row.error??'Awaiting grading'}</p>{/if}</section>{/each}
+{:else if row.judge_split}{@render splitRating(row.judge_split)}{#if row.judge_error}<p>{row.judge_error}</p>{/if}{:else}<p>{row.judge_error??row.error??'Awaiting grading'}</p>{/if}</section>{/each}
 {#if metrics.run_id && metrics.answers.some((r:any)=>!r.judge&&r.output)}<button disabled={!!busy} onclick={()=>action('Retrying grades',async()=>{const index=inspected!;const updated=await api('history/'+turns[index].run_id+'/grade',post({}));turns[index]=updated;report=updated})}>Retry grading</button>{/if}</aside>{/if}
 <div class="layout"><section class="panel"><fieldset disabled={!!busy}>
 {#if page==='Prompt lab'}
@@ -93,13 +99,13 @@
 {#if report.answers}
 <h2>Answer quality</h2><div class="cards">{#each report.answers as row,i}<article class="panel"><small class="modeltitle"><span class={'dot d'+i}></span>{name(row.requested_model)}</small>
 {#if row.judge}<h3>{row.judge.score.toFixed(1)}<em> / 10</em></h3><meter min="0" max="10" value={row.judge.score} aria-label={name(row.requested_model)+' quality'}></meter><p>{row.judge.reason??row.judge.scope}</p><details><summary>Grading details</summary><p>{row.judge.model}</p>{#if row.judge.ollama_duration_ns!=null}<p>Judge call · {(row.judge.ollama_duration_ns/1e9).toFixed(2)} s{#if row.judge.ollama_load_ns!=null} · model load {(row.judge.ollama_load_ns/1e9).toFixed(2)} s{/if}</p>{/if}{#if row.judge.reason}<p>{row.judge.reason}</p>{/if}{#if row.judge.transcript}{#each row.judge.transcript as round}<details><summary>Review round {round.round}</summary>{#each round.reviews as review}<p><strong>{review.model} · {review.score}/5</strong><br>{review.reason}</p>{/each}</details>{/each}{/if}{#each Object.entries(row.judge.criteria) as [criterion,item]}<p><strong>{criterion} · {(item as any).rating}/5</strong><br>{(item as any).reason}</p>{/each}</details>
-{:else}<p>{row.judge_error??(row.status==='Error'?row.error:'Awaiting grading')}</p>{/if}</article>{/each}</div>
+{:else if row.judge_split}{@render splitRating(row.judge_split)}{#if row.judge_error}<p>{row.judge_error}</p>{/if}{:else}<p>{row.judge_error??(row.status==='Error'?row.error:'Awaiting grading')}</p>{/if}</article>{/each}</div>
 {#if report.run_id && report.answers.some((r:any)=>!r.judge&&r.output)}<button disabled={!!busy} onclick={()=>action('Grading saved responses',async()=>{report=await api('history/'+report.run_id+'/grade',post({}))})}>Grade saved answers</button>{/if}
 <h2>Response time</h2><div class="panel">{#each report.answers.filter((r:any)=>r.latency_ms!=null) as r}<div class="barrow"><span>{name(r.requested_model)}</span><progress max={Math.max(1,...report.answers.map((a:any)=>a.latency_ms??0))} value={r.latency_ms}></progress><span>{timing(r.latency_ms)}</span></div>{/each}</div>
 <h2>Answers</h2><details><summary>View original prompt</summary><pre>{report.prompt}</pre></details><div class="cards">{#each report.answers as r}<article class="panel"><small>{name(r.requested_model)} · {r.status}</small><pre>{r.output??r.error}</pre></article>{/each}</div>
 {:else}
 <h2>Matched workload</h2><div class="cards">{#each runs as r}<article class="panel"><small>{name(r.model_id)}</small><h3>{r.successful_cases} / {r.attempted_cases}</h3><progress max="1" value={r.success_rate}></progress>{#if r.judge_mean!=null}<p>Consensus quality · <strong>{r.judge_mean.toFixed(1)}/10</strong> ({r.judge_count} scored)</p><meter min="0" max="10" value={r.judge_mean} aria-label="Average judge rating"></meter>{/if}<p>Cases passed · {(r.success_rate*100).toFixed(0)}%</p><p>95% Wilson interval {r.wilson_95.map((v:number)=>(100*v).toFixed(0)+'%').join(' – ')}</p><p>Median attempt · {timing(r.p50_ms)}</p></article>{/each}</div>
 {#if report.pairs}<details class="panel"><summary>Paired comparisons</summary>{#each report.pairs as pair}<p><strong>{name(pair.first)} / {name(pair.second)}</strong><br>Only the first passed {pair.first_only} cases. Only the second passed {pair.second_only}. Adjusted p = {pair.holm_p.toFixed(3)}. {pair.holm_p < .05 ? 'A difference was detected on these cases.' : 'Insufficient evidence of a difference.'}</p>{/each}</details>{/if}
-<label for="inspect">Inspect a case</label><select id="inspect" bind:value={caseIndex}>{#each runs[0].results as row,i}<option value={i}>{row.case_id}</option>{/each}</select><p>{runs[0].results[caseIndex].input}</p><pre>Expected: {JSON.stringify(runs[0].results[caseIndex].expected)}</pre><div class="cards">{#each runs as r}<article class="panel"><small>{name(r.model_id)} · {r.results[caseIndex].passed?'Pass':'Miss'}</small><pre>{r.results[caseIndex].output||r.results[caseIndex].reason}</pre>{#if r.results[caseIndex].judge}<strong>Judge · {r.results[caseIndex].judge.score}/10</strong><p>{r.results[caseIndex].judge.reason}</p>{:else if r.results[caseIndex].judge_error}<p>{r.results[caseIndex].judge_error}</p>{/if}</article>{/each}</div>
+<label for="inspect">Inspect a case</label><select id="inspect" bind:value={caseIndex}>{#each runs[0].results as row,i}<option value={i}>{row.case_id}</option>{/each}</select><p>{runs[0].results[caseIndex].input}</p><pre>Expected: {JSON.stringify(runs[0].results[caseIndex].expected)}</pre><div class="cards">{#each runs as r}<article class="panel"><small>{name(r.model_id)} · {r.results[caseIndex].passed?'Pass':'Miss'}</small><pre>{r.results[caseIndex].output||r.results[caseIndex].reason}</pre>{#if r.results[caseIndex].judge}<strong>Judge · {r.results[caseIndex].judge.score}/10</strong><p>{r.results[caseIndex].judge.reason}</p>{:else if r.results[caseIndex].judge_split}{@render splitRating(r.results[caseIndex].judge_split)}{:else if r.results[caseIndex].judge_error}<p>{r.results[caseIndex].judge_error}</p>{/if}</article>{/each}</div>
 {/if}{/if}
 </main></div>
