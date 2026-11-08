@@ -23,3 +23,14 @@ def test_phi_alias_is_used_for_dispatch():
     ]) as call:
         assert generate('phi4-mini:3.8b','question')['model_digest']=='installed'
         assert call.call_args.args[1]['model']=='phi4-mini:latest'
+
+
+def test_extended_chat_budget(monkeypatch):
+    from app.chat_context import chat_budget
+    monkeypatch.setenv("MODELROI_CHAT_CONTEXT", "extended")
+    assert chat_budget().turns == 12 and chat_budget().characters == 8000
+    with patch('app.providers.local.request', side_effect=[
+        {'models': [{'name':'qwen3:4b'}]}, {'done': True, 'message': {'content':'ok'}}
+    ]) as call:
+        generate('qwen3:4b', 'continue', [{'role':'user','content':'earlier'}])
+    assert call.call_args.args[1]['options']['num_ctx'] == 8192

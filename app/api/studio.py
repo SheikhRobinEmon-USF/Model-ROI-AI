@@ -1,4 +1,5 @@
 """Local studio API, enabled only by the desktop launcher."""
+from app.chat_context import chat_budget
 import os
 import json
 from queue import Queue
@@ -82,7 +83,7 @@ def prompt(body: Question):
     with exclusive():
         previous = []
         parent = body.parent_id
-        while parent and len(previous) < 6:
+        while parent and len(previous) < chat_budget().turns:
             turn = saved(parent)
             if turn.get("evidence_type") != "custom_prompt":
                 raise HTTPException(422, "Choose a previous chat turn.")

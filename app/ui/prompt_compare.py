@@ -1,4 +1,5 @@
 """Compare free-form responses without assuming a reference answer."""
+from app.chat_context import chat_budget
 from datetime import datetime, timezone
 import json
 from uuid import uuid4
@@ -18,12 +19,13 @@ def evaluate(prompt, models, previous=()):
         row = {"requested_model": tag}
         try:
             history = []
-            remaining = 3200
+            budget = chat_budget()
+            remaining = budget.characters
             for turn in previous:
                 prior = next((a.get("output") for a in turn["answers"] if a["requested_model"] == tag), None)
                 if not prior or remaining < 200:
                     continue
-                question = turn["prompt"][:min(800, remaining // 2)]
+                question = turn["prompt"][:min(budget.question_characters, remaining // 2)]
                 answer = prior[:remaining - len(question)]
                 history[:0] = [{"role": "user", "content": question}, {"role": "assistant", "content": answer}]
                 remaining -= len(question) + len(answer)

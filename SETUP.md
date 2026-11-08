@@ -174,3 +174,7 @@ Run `ollama pull gpt-oss:20b`. The judge grades each delivered answer directly f
 The first history read imports valid legacy UUID-named JSON reports into `history.sqlite3` in `~/.modelroi/runs` (or `MODELROI_HISTORY_DIR`). New writes go to SQLite. Old JSON files remain as migration originals; deleting an imported conversation also removes its corresponding original files. For a complete backup, stop the studio and copy the history directory. Restart with that directory to restore it.
 
 Open History and choose **Analyze saved benchmarks** to run DuckDB locally on the benchmark measurements. The analytical database exists only for that query. No separate server, account or network extension is required.
+
+### Longer follow-up context on macOS
+
+Stop the studio and run `MODELROI_CHAT_CONTEXT=extended python3 scripts/start_local.py` to include up to 12 earlier turns and 8,000 characters of combined history per candidate. A follow-up carrying history requests an 8,192-token window from Ollama. Standard mode uses six turns, 3,200 characters and 4,096 tokens. Prior user questions are individually capped at 2,000 characters in extended mode and 800 in standard mode. Recent turns take priority. The full saved transcript stays available in both modes. Restart with the ordinary launcher command to restore standard mode.

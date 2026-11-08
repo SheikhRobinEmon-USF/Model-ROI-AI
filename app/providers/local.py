@@ -1,4 +1,5 @@
 """Local-only model probe. No remote URL or paid-provider fallback."""
+from app.chat_context import chat_budget
 from app.execution.performance import current
 import argparse
 import json
@@ -36,7 +37,7 @@ def generate(model, prompt, history=(), *, keep_alive=0):
     if match is None:
         raise ValueError(f'{model} is not installed. In Terminal run: ollama pull {model}')
     start = perf_counter()
-    options = {'temperature': 0, 'num_ctx': 4096, 'num_predict': 512}
+    options = {'temperature': 0, 'num_ctx': chat_budget().tokens if history else 4096, 'num_predict': 512}
     payload = {'model': match.get('name') or match['model'], 'messages': [*history, {'role': 'user', 'content': prompt}],
                'stream': False, 'options': options, 'keep_alive': keep_alive}
     # Phi has no configurable thinking mode.
