@@ -23,7 +23,7 @@ def test_every_grade(score):
 
 @pytest.mark.parametrize("invalid", [None, [], {"score": True, "reason": "yes"},
     {"score": 11, "reason": "yes"}, {"score": -1, "reason": "yes"}, {"score": 7, "reason": " "},
-    {"score": "8", "reason": "yes"}])
+    {"score": "8/20", "reason": "yes"}])
 def test_invalid_verdict_retried_then_rejected(invalid):
     with patch("app.graders.quality.request", return_value=reply(invalid)) as call:
         with pytest.raises(ValueError, match="two attempts"):
@@ -53,3 +53,17 @@ def test_live_grading_and_saved_retry(tmp_path, monkeypatch):
     assert judge.call_count == 1
     assert graded == client.get(path).json()
     assert all(row["judge"]["reason"] == "The sum is correct." and "judge_error" not in row for row in graded["answers"])
+
+
+@pytest.mark.parametrize(("score", "key"), [("8", "reason"), ("8/10", "comment"), (8.0, "feedback")])
+def test_equivalent_verdicts(score, key):
+    with patch("app.graders.quality.request", return_value=reply({"score": score, key: "Mostly correct."})) as call:
+        assert rating("q", "a")["score"] == 8
+        assert call.call_count == 1
+
+
+def test_empty_comment_triggers_targeted_repair():
+    with patch("app.graders.quality.request", side_effect=[reply({"score": 4, "reason": ""}),
+               reply({"score": 4, "reason": "Missing the date."})]) as call:
+        assert rating("q", "a")["reason"] == "Missing the date."
+        assert "nonempty sentence" in call.call_args.args[1]["messages"][-1]["content"]
