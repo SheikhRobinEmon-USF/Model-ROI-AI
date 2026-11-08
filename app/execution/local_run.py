@@ -9,7 +9,6 @@ from app.graders.exact import grade
 from app.evaluation import wilson, percentile
 
 def run(cases, model='qwen3:4b', progress=None, generate_fn=None):
-    generate_fn = generate_fn or generate
     rows=[]
     started=datetime.now(timezone.utc).isoformat()
     for i,case in enumerate(cases):
@@ -17,7 +16,10 @@ def run(cases, model='qwen3:4b', progress=None, generate_fn=None):
         row={'case_id':case.case_id,'task_type':case.task_type,'input':case.input,
              'expected':case.expected,'review_status':case.review_status}
         try:
-            response=generate_fn(model,case.input)
+            if generate_fn is None:
+                response = generate(model, case.input, keep_alive=0 if i + 1 == len(cases) else "15s")
+            else:
+                response = generate_fn(model, case.input)
             result=grade(case,response['output'])
             if response.get('done_reason')=='length':
                 result={'passed':False,'reason':'output_truncated'}

@@ -4,9 +4,6 @@ from itertools import combinations, zip_longest
 from collections import defaultdict
 from uuid import uuid4
 
-import altair as alt
-import pandas as pd
-import streamlit as st
 
 from app.evaluation import paired_exact, percentile
 from app.execution.local_run import run
@@ -23,8 +20,8 @@ def mix_workloads(cases):
 
 
 def compare(cases, models, progress=None, generate_fn=None):
-    if len(set(models)) != len(models) or not 2 <= len(models) <= 3 or not cases:
-        raise ValueError("Select two or three different models and at least one case.")
+    if len(set(models)) != len(models) or len(models) != 2 or not cases:
+        raise ValueError("Select two different models and at least one case.")
     runs = []
     for index, model in enumerate(models):
         if model not in MODELS:
@@ -39,6 +36,10 @@ def compare(cases, models, progress=None, generate_fn=None):
 
 
 def show(report):
+    import altair as alt
+    import pandas as pd
+    import streamlit as st
+
     runs = report["runs"]
     summary = []
     for item in runs:

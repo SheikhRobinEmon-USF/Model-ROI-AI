@@ -4,8 +4,6 @@ import json
 from uuid import uuid4
 
 from app.execution.performance import emit, rate_once
-import pandas as pd
-import streamlit as st
 
 from app.graders.quality import rating
 from app.providers.local import generate, installed_match, request
@@ -65,6 +63,9 @@ def grade_remaining(report):
 
 
 def display(report, allow_grading=False):
+    import pandas as pd
+    import streamlit as st
+
     st.subheader("Answer quality")
     pending = any(row.get("output") and row["status"] != "Error" and "judge" not in row for row in report["answers"])
     if allow_grading and pending and st.button("Grade saved answers", key="grade_"+report["run_id"]):
@@ -108,6 +109,8 @@ def display(report, allow_grading=False):
 
 
 def panel(enabled):
+    import streamlit as st
+
     prompt = st.text_area("Your question", value=st.session_state.get("last_question", ""),
                           placeholder="What is the distance from Florida to California?",
                           height=130, max_chars=8000)

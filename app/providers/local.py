@@ -24,7 +24,7 @@ def installed_match(model, installed):
                 return entry
     return None
 
-def generate(model, prompt, history=()):
+def generate(model, prompt, history=(), *, keep_alive=0):
     state = current.get()
     if state is None or state.inventory is None:
         installed = request('/api/tags').get('models', [])
@@ -38,7 +38,7 @@ def generate(model, prompt, history=()):
     start = perf_counter()
     options = {'temperature': 0, 'num_ctx': 4096, 'num_predict': 512}
     payload = {'model': match.get('name') or match['model'], 'messages': [*history, {'role': 'user', 'content': prompt}],
-               'stream': False, 'options': options}
+               'stream': False, 'options': options, 'keep_alive': keep_alive}
     # Phi has no configurable thinking mode.
     if model.split(':')[0] != 'phi4-mini':
         payload['think'] = False

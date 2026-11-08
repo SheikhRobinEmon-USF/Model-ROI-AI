@@ -15,7 +15,7 @@ SCHEMA = {"type": "object", "required": ["score", "reason"], "properties": {
 
 
 def rating(question, answer):
-    payload = {"model": MODEL, "think": "low", "stream": False, "keep_alive": 0,
+    payload = {"model": MODEL, "think": "low", "stream": False, "keep_alive": "15s",
                "format": SCHEMA, "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 768},
                "messages": [{"role": "system", "content": RUBRIC},
                             {"role": "user", "content": json.dumps({"task": question, "answer": answer})}]}
