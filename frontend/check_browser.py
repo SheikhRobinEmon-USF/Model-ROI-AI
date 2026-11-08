@@ -19,7 +19,7 @@ with sync_playwright() as pw:
         p.route('**/studio/live/prompt',comparison)
         p.goto('http://127.0.0.1:8598/')
         p.get_by_label('What should the models solve?').fill('Explain the results.')
-        p.get_by_role('button',name='Compare answers').click()
+        p.get_by_role('button',name='Send').click()
         p.get_by_role('button',name='View metrics').click()
         p.get_by_role('heading',name='Answer quality').wait_for()
         drawer=p.get_by_role('complementary',name='Performance metrics')
@@ -27,6 +27,14 @@ with sync_playwright() as pw:
         assert drawer.get_by_text('Test judge comment.',exact=True).count()==2
         assert p.evaluate('document.documentElement.scrollWidth <= window.innerWidth'),width
         p.get_by_role('button',name='Close metrics').click()
+        editor=p.get_by_label('What should the models solve?')
+        editor.fill('Explain again.')
+        with p.expect_request('**/studio/live/prompt') as follow_up:
+            editor.press('Enter')
+        assert follow_up.value.post_data_json['parent_id']=='test'
+        p.get_by_role('button',name='View metrics').nth(1).wait_for()
+        p.get_by_role('button',name='New chat').click()
+        assert p.get_by_role('button',name='View metrics').count()==0
         p.get_by_role('button',name='Benchmark').click()
         p.get_by_label('Evaluation set').select_option('standard')
         assert p.get_by_label('Task category').count()==1
