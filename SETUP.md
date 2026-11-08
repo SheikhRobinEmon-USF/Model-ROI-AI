@@ -2,14 +2,15 @@
 
 Policy updated November 6, 2026: no paid APIs. Use local downloadable weights with Ollama. Hugging Face is the model source; local computation uses your own RAM, CPU/GPU and electricity. Hosted inference is not automatically free because weights are downloadable.
 
-## Recommended models
+## Studio models
 
-| Model | Role | License | Practical starting hardware (estimate, not minimum guarantee) |
-|---|---|---|---|
-| Qwen3 4B, quantized | Default balanced local candidate | Apache 2.0 | 16 GB system RAM preferred |
-| Qwen3 1.7B, quantized | Lower-memory fallback, same-family baseline | Check exact artifact license before redistribution | 8 GB system RAM starting point |
+| Ollama tag | Role |
+|---|---|
+| `qwen3:4b` | First answer |
+| `gemma4:e4b` | Second answer |
+| `gpt-oss:20b` | Quality grades, comments and comparison summaries |
 
-Use one model at a time and a short context (4,096 tokens). CPU-only works but can be slow. Available memory, quantization and prompt length determine actual fit. Reserve roughly 15 GB free disk for the application and a small model pair, then check download sizes. These are planning estimates. No accuracy or latency ranking has been measured for this project.
+The studio runs inference sequentially. On a 16 GB Mac the judge competes with macOS and other apps for unified memory. Response time depends on the prompt and available memory.
 
 ## 1. Install prerequisites
 
@@ -155,7 +156,7 @@ ChatGPT's remote workspace cannot automatically reach Ollama on your personal co
 
 Stop the running app with Control+C. If your folder was downloaded as a ZIP (`Model-ROI-AI-main`), download the current ZIP again and extract it to a new folder; `git pull` only works in a Git clone. Preserve your existing folder until the new version starts. Saved runs remain in `~/.modelroi/runs`.
 
-Run the launcher from the new repository folder. The `.streamlit/config.toml` file sets a consistent light theme, and `app/ui/theme.py` provides the visual system. Restart Streamlit after updating theme configuration. In Streamlit Settings, choose the custom application theme if you previously selected Dark manually.
+For a Git clone, run `git pull --ff-only` and restart with `python3 scripts/start_local.py` using Python 3.12 or newer. Open the printed URL. The launcher serves the bundled browser interface without a Node installation.
 
 ## Compare two local models
 

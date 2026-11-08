@@ -1,6 +1,14 @@
 # MODELROI AI
 ## Final Product Strategy, Engineering, Evaluation and Launch Plan
 
+## Current implementation plan · November 2026
+
+The current studio implements local Qwen3 and Gemma comparisons, a separate gpt-oss-20b judge, streamed progress for generation and grading, and local report storage. Chat threads support follow-ups, attachments, rename, pin and delete. The Svelte interface exposes per-answer metrics and cached judge summaries in Results. FastAPI coordinates the work against Ollama. The main studio runs on localhost.
+
+Release work still includes independent case review, untouched holdout evaluation, measurement on target hardware, cancellation and public deployment validation. Use the [README](../README.md) for the active workflow. The original strategy below records the earlier paid-provider and Streamlit design.
+
+## Historical v2.1 baseline
+
 **Version:** 2.1 (normative implementation contract)  
 **Prepared:** November 6, 2026  
 **Status:** Requirements ready for implementation; code, benchmark outcomes, and market adoption are NOT yet validated  

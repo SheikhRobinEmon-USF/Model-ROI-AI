@@ -14,7 +14,7 @@ from app.ui.comparison import MODELS
 def evaluate(prompt, models, previous=()):
     rows = []
     for tag in models:
-        emit("status", message=f"Generating answer with {MODELS[tag]}")
+        emit("status", phase="generate", message=f"Generating answer with {MODELS[tag]}")
         row = {"requested_model": tag}
         try:
             history = []
@@ -51,7 +51,7 @@ def grade_remaining(report):
                 question = json.dumps(row["conversation_context"], ensure_ascii=False) + "\nCurrent question: " + question
             if row["status"] == "Truncated":
                 question += "\nEvaluator note: generation stopped at the output limit. Evaluate only the delivered portion and account for missing content."
-            emit("status", message=f"Grading {MODELS.get(row['requested_model'], row['requested_model'])}")
+            emit("status", phase="grade", message=f"gpt-oss-20b is grading {MODELS.get(row['requested_model'], row['requested_model'])}")
             row["judge"] = rate_once(rating, question, row["output"])
             if row["status"] == "Truncated":
                 row["judge"]["scope"] += " (partial answer)"

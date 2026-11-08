@@ -1,4 +1,8 @@
-# Small pilot API selection
+# Studio model selection
+
+The active studio uses Ollama on localhost. Qwen3 4B and Gemma 4 E4B generate answers. OpenAI gpt-oss-20b runs locally as the sole grader and comparison summarizer. These calls incur zero hosted API charges. Model downloads, runtime memory, electricity and hardware are separate considerations.
+
+## Historical hosted pilot proposal
 
 Checked 2026-11-06. Provisional pair: OpenAI GPT-6 Luna and Anthropic Claude Haiku 5.5. Both list standard short-context text pricing of $0.10 input / $0.50 output per million tokens. This is a cost-based shortlist, not measured quality superiority.
 

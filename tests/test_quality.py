@@ -67,3 +67,16 @@ def test_empty_comment_triggers_targeted_repair():
                reply({"score": 4, "reason": "Missing the date."})]) as call:
         assert rating("q", "a")["reason"] == "Missing the date."
         assert "nonempty sentence" in call.call_args.args[1]["messages"][-1]["content"]
+
+
+def test_live_phases_match_actual_work(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODELROI_ENABLE_LOCAL", "true")
+    monkeypatch.setenv("MODELROI_HISTORY_DIR", str(tmp_path))
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"origin": "http://127.0.0.1"})
+    with patch("app.ui.prompt_compare.generate", return_value={"output": "4"}), patch(
+        "app.graders.quality.request", return_value=reply({"score": 10, "reason": "Correct."})
+    ):
+        response = client.post("/studio/live/prompt", json={"models": ["qwen3:4b"], "prompt": "2+2?"})
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert [e["phase"] for e in events if e["event"] == "status"] == ["prepare", "generate", "grade", "save"]
+    assert events[-1]["event"] == "complete"

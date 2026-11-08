@@ -87,34 +87,38 @@ def prompt(body: Question):
                 raise HTTPException(422, "Choose a previous chat turn.")
             previous.append(turn)
             parent = turn.get("parent_id")
+        emit("status", phase="prepare", message="Preparing the prompt and conversation context")
         result = (evaluate(body.prompt, body.models, previous) if previous
                   else evaluate(body.prompt, body.models))
         if body.parent_id:
             result["parent_id"] = str(body.parent_id)
         grade_remaining(result)
+        emit("status", phase="save", message="Saving results to local history")
         save(result)
         return result
 
 @router.post("/benchmark")
 def benchmark(body: Benchmark):
     with exclusive():
+        emit("status", phase="prepare", message="Selecting matched benchmark cases")
         cases=analytical_cases() if body.suite=="analytical" else validate_jsonl((Path(__file__).resolve().parents[2]/"datasets/v1/draft_cases.jsonl").read_bytes())
         if body.category != "all":
             cases=[case for case in cases if case.task_type == body.category]
         if not cases:
             raise HTTPException(422,"No cases match that category.")
         cases=mix_workloads(cases)[:body.count]
+        emit("status", phase="generate", message="Running the first benchmark case")
         if len(body.models)>1:
-            result=compare(cases,body.models,progress=lambda fraction,model:emit("status",message=f"Evaluating {model} · {fraction:.0%} of generations complete"))
+            result=compare(cases,body.models,progress=lambda fraction,model:emit("status",phase="generate",message=f"Evaluating {model} · {fraction:.0%} of generations complete"))
         else:
-            result=run(cases,model=body.models[0],progress=lambda done,total:emit("status",message=f"Evaluated {done} of {total} cases"))
-        emit("status",message="Scoring benchmark answers with gpt-oss-20b")
+            result=run(cases,model=body.models[0],progress=lambda done,total:emit("status",phase="generate",message=f"Evaluated {done} of {total} cases"))
         for model_run in result.get("runs", [result]):
             scores = []
-            for row in model_run["results"]:
+            for index, row in enumerate(model_run["results"], 1):
                 if not row.get("output", "").strip():
                     continue
                 try:
+                    emit("status", phase="grade", message=f"Grading {model_run['model_id']} · case {index} of {len(model_run['results'])}")
                     task = row["input"]
                     if row.get("done_reason") == "length":
                         task += "\nEvaluator note: the delivered answer was truncated."
@@ -138,6 +142,7 @@ def benchmark(body: Benchmark):
                 adjusted=max(adjusted,min(1,(len(pairs)-i)*pair["p"]))
                 pair["holm_p"]=adjusted
             result["pairs"]=pairs
+        emit("status", phase="save", message="Saving results to local history")
         save(result)
         return result
 
@@ -212,6 +217,7 @@ def regrade(run_id: UUID):
             raise HTTPException(422,"Only prompt runs support rubric grading.")
         grade_remaining(result)
         result.pop("comparison_summary", None)
+        emit("status", phase="save", message="Saving results to local history")
         save(result)
         return result
 

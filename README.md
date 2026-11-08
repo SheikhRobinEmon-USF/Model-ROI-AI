@@ -1,50 +1,39 @@
 # ModelROI AI
 
-A local-first evaluation studio for Qwen3 4B. Test prompts, evaluate structured workloads, inspect failures, and download the evidence behind each result.
+ModelROI compares Qwen3 4B and Gemma 4 E4B on the same question or benchmark using Ollama on your computer. OpenAI’s local gpt-oss-20b grades delivered answers and summarizes each comparison. The studio is a development preview with 50 draft synthetic benchmark cases.
 
-**Status: functional development preview, not a validated production release.** Paid APIs are disabled. Real Qwen3 inference has not yet been verified in the development environment. The dataset contains 50 draft synthetic cases pending independent review.
+## Start the studio
 
-## Quick start
-
-Install Python 3.12, Git and Ollama, then:
+Install Git, Ollama and Python 3.12 or newer. Open Ollama, then run:
 
 ```bash
 git clone https://github.com/SheikhRobinEmon-USF/Model-ROI-AI.git
 cd Model-ROI-AI
-python -m venv .venv
-# Activate the environment as described in SETUP.md.
-python -m pip install -e '.[dev]'
 ollama pull qwen3:4b
+ollama pull gemma4:e4b
+ollama pull gpt-oss:20b
+python3 scripts/start_local.py
 ```
 
-Enable local execution in your terminal:
-- macOS/Linux: `export MODELROI_ENABLE_LOCAL=true`
-- Windows PowerShell: `$env:MODELROI_ENABLE_LOCAL="true"`
+On Windows use `py -3.12 scripts/start_local.py` for the last command. Open the printed local URL. To update a clone, stop the launcher, run `git pull --ff-only` and restart it. [Platform setup and optional tester pilot](SETUP.md)
 
-Run `python -m streamlit run app/ui/Home.py` and open http://localhost:8501.
+## Using the studio
 
-[Complete Windows, macOS and Linux setup](SETUP.md)
+- **Prompt lab** compares prompts or extracted document excerpts. Send a follow-up with Enter or insert a newline with Shift+Enter. Each candidate receives bounded context from its own prior answers.
+- **Processing** follows actual server events through preparation, generation, grading and saving. It names the active model or benchmark case when available. Answers appear as each candidate finishes. Expand **Metrics** below an answer for timing, the judge’s grade out of 10 and its comment. Failed grades can be retried on saved answers.
+- **Chats** keeps conversations in the left sidebar, with a history toggle on mobile. New chat starts a separate thread. Use the actions menu to rename, pin, unpin or delete one.
+- **Benchmark** runs one or both candidates on matched cases, including six analytical challenges in math, coding and operations. Executable scoring checks expected JSON alongside the judge’s qualitative assessment.
+- **Results** shows a short comparison generated when first opened and cached locally. Inspect case-level evidence, grades, timings and uncertainty, or export the report as JSON. **History** reopens saved runs.
 
-## Interface
+## Architecture and evidence
 
-- **Overview:** workload summary and instant no-model mock demo.
-- **Prompt lab:** test a bounded prompt against Qwen3 on the host computer.
-- **Benchmark:** select task category and 1–50 cases; run sequentially.
-- **Results:** inspect success counts, Wilson intervals, failures, expected answers and outputs; download JSON/CSV.
-
-The public preview defaults to mock-only mode. Never enable local execution on an unrestricted public server. For a small visitor pilot, use the mock preview until reviewed historical results and publication controls are implemented.
-
-## Evidence and methodology
+The launcher serves a bundled Svelte and TypeScript frontend from FastAPI. The API streams progress and results over newline-delimited JSON. Ollama runs models sequentially to limit memory pressure. Completed prompt turns and benchmarks are stored under `~/.modelroi/runs`, including submitted excerpts. Public hosting is deferred.
 
 The local runner records model digest when supplied by Ollama, dataset SHA-256, settings, token counts, UTC start time and per-case elapsed time. Exceptions count as failed cases. Truncated outputs fail grading. Exact JSON checks preserve types; numeric 1 does not equal boolean true.
 
 A 95% Wilson interval accompanies success rates. Latency is machine-specific and exploratory with fewer than 100 observations. No comparative model winner is claimed. Zero provider API fees do not imply zero electricity or hardware cost.
 
-Hospital cases are synthetic arithmetic examples, not independently verified CMS facts. The current graders do not implement the entire financial grounding specification. Local benchmark runs are saved atomically under ~/.modelroi/runs and can be reopened from Results. Prompt-lab and mock results remain session-only.
-
-## Architecture
-
-Streamlit calls a local sequential evaluation service, which uses the localhost Ollama API and deterministic graders. FastAPI currently provides health and mock-demo endpoints; it does not orchestrate local runs. DuckDB reservation infrastructure is retained for future work but paid execution is unavailable.
+Hospital cases are synthetic arithmetic examples, not independently verified CMS facts. The current graders do not implement the entire financial grounding specification. Local benchmark runs are saved atomically under ~/.modelroi/runs and can be reopened from Results. The studio also saves prompt comparisons.
 
 ## Validation
 
@@ -67,22 +56,4 @@ The second command requires Ollama and downloaded weights. Simulated provider te
 
 Original application code is MIT licensed. Qwen3 4B model artifacts retain their Apache 2.0 license and are downloaded separately. See https://huggingface.co/Qwen/Qwen3-4B/blob/main/LICENSE. Model weights are not bundled with this repository.
 
-The original v2.1 contract remains in docs/implementation_contract.md. The user's subsequent decision to use free local Qwen3 supersedes its paid-provider release requirement; other unmet requirements remain explicitly tracked above.
-
-## Launch with existing Ollama
-
-Open Ollama, then run `python3.12 scripts/start_local.py` on macOS/Linux or `py -3.12 scripts/start_local.py` on Windows. The launcher installs application dependencies and starts the private local interface.
-
-### Two-model benchmark
-Compare Qwen3 4B and Gemma 4 E4B on matched cases. Benchmark supports one or both models. Local gpt-oss-20b grades each delivered answer from 0 to 10 and supplies a short comment. Results for multi-model runs include pass rates, median response times, case-level disagreements, side-by-side answers, Wilson intervals and Holm-adjusted exact paired tests. All execution is local.
-
-### Analytical challenges and file questions
-
-In **Benchmark → Analytical challenges**, compare six scored math, code-tracing/debugging and operations problems. Choose a category or run the whole set. Each problem asks for a JSON answer with explicit fields. The same deterministic answer key grades every model. Use Results to inspect misses and uncertainty.
-
-In **Prompt lab** or **Benchmark → My question**, upload a file, enter a question, preview the excerpt and compare responses. The local launcher installs PDF, modern Office and Excel readers. Legacy binary Word/PowerPoint files require antiword/catppt respectively, or conversion to DOCX/PPTX. Scanned PDFs require prior OCR. Only the displayed excerpt is sent to each model. Local history includes the excerpt. File questions are qualitative unless a separate graded workload is selected.
-
-## Local web studio
-The Mac/Windows/Linux launcher now serves a compiled Svelte 5 + TypeScript studio from FastAPI. Run `python3 scripts/start_local.py` after updating your clone. Use the URL printed by the launcher. The browser bundle is included and runs without a Node installation or CDN. The previous Streamlit workspace remains available using the manual instructions in SETUP.md. The tester pilot remains a separate entry point.
-
-Frontend development: from `frontend/`, run `npm ci` and `npm run build`; commit the generated dist folder with source changes.
+For the active implementation plan and historical baseline see [the implementation contract](docs/implementation_contract.md). For frontend development run `npm ci` and `npm run build` in `frontend/`, then commit the rebuilt bundle.
