@@ -16,7 +16,7 @@ from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
-from app.graders.qwen import rating
+from app.graders.council import rating
 from app.datasets.analytical import analytical_cases
 from app.datasets.attachments import extract
 from app.datasets.validate import validate_jsonl
@@ -96,7 +96,7 @@ def benchmark(body: Benchmark):
             result=compare(cases,body.models,progress=lambda fraction,model:emit("status",message=f"Evaluating {model} · {fraction:.0%} of generations complete"))
         else:
             result=run(cases,model=body.models[0],progress=lambda done,total:emit("status",message=f"Evaluated {done} of {total} cases"))
-        emit("status",message="Scoring benchmark answers with Qwen3.8 27B")
+        emit("status",message="Scoring benchmark answers with Flow-Judge + gpt-oss-20b")
         for model_run in result.get("runs", [result]):
             scores = []
             for row in model_run["results"]:

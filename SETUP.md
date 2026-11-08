@@ -169,3 +169,6 @@ Open Ollama and keep the Mac awake. In your Git clone, run `brew install cloudfl
 
 ### Automatic quality judge
 Run `ollama pull qwen3.8:27b` on the Ollama host. Prompt comparisons automatically send the original question and each delivered answer to this local judge. The judge supplies the displayed 0–10 score and explanation. Scores from previously saved reports retain their original attribution. Built-in benchmark pass rates continue to use their answer keys.
+
+### Collaborative judges
+Install both judges with `ollama pull hf.co/flowaicom/Flow-Judge-v0.1-GGUF:Q4_K_M` and `ollama pull gpt-oss:20b`. Independent grades use a 1–5 rubric mapped to 0–10. Disagreeing judges receive each other's reasoning for one review round. Only exact agreement is published. Persistent disagreement remains unscored. Judges unload after each call to reduce simultaneous memory residency. Existing saved grades retain their earlier judge attribution.

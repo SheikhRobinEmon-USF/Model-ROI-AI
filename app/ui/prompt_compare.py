@@ -7,7 +7,7 @@ from app.execution.performance import emit, rate_once
 import pandas as pd
 import streamlit as st
 
-from app.graders.qwen import JUDGE, rating
+from app.graders.council import rating
 from app.providers.local import generate, installed_match, request
 from app.storage.history import save
 from app.ui.comparison import MODELS
@@ -45,7 +45,7 @@ def grade_remaining(report):
                 row["judge"]["scope"] += " (partial answer)"
             row.pop("judge_error", None)
         except (ValueError, OSError, KeyError) as exc:
-            row["judge_error"] = f"Qwen3.8 27B could not score this answer ({exc})."
+            row["judge_error"] = f"Flow-Judge + gpt-oss-20b could not score this answer ({exc})."
         emit("answer", row=row.copy())
 
 
@@ -130,7 +130,7 @@ def panel(enabled):
             st.code("\n".join("ollama pull "+tag for tag in missing), language="bash")
     else:
         st.info("Start the local launcher to compare models on your machine.")
-    st.caption("Qwen3.8 27B automatically rates each answer out of 10.")
+    st.caption("Flow-Judge + gpt-oss-20b automatically rates each answer out of 10.")
     if st.button("Compare answers", type="primary", disabled=not enabled or not models or not prompt.strip()):
         with st.spinner("Running the same question through each selected model…"):
             report = evaluate(prompt, models)
