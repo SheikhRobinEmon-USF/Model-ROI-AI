@@ -10,6 +10,7 @@ from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
+from app.graders.qwen import rating
 from app.datasets.analytical import analytical_cases
 from app.datasets.attachments import extract
 from app.datasets.validate import validate_jsonl
@@ -50,8 +51,6 @@ class Settings(BaseModel):
 
 class Question(Settings):
     prompt: str = Field(min_length=1,max_length=8000)
-    reference: str = Field(default="",max_length=1800)
-    judge: bool = True
 
 class Benchmark(Settings):
     suite: Literal["analytical","standard"]
@@ -70,8 +69,7 @@ def models():
 def prompt(body: Question):
     with exclusive():
         result=evaluate(body.prompt,body.models)
-        if body.judge:
-            grade_remaining(result,body.reference)
+        grade_remaining(result)
         save(result)
         return result
 
@@ -85,6 +83,21 @@ def benchmark(body: Benchmark):
             raise HTTPException(422,"No cases match that category.")
         cases=mix_workloads(cases)[:body.count]
         result=compare(cases,body.models) if len(body.models)>1 else run(cases,model=body.models[0])
+        for model_run in result.get("runs", [result]):
+            scores = []
+            for row in model_run["results"]:
+                if not row.get("output", "").strip():
+                    continue
+                try:
+                    task = row["input"]
+                    if row.get("done_reason") == "length":
+                        task += "\nEvaluator note: the delivered answer was truncated."
+                    row["judge"] = rating(task, row["output"])
+                    scores.append(row["judge"]["score"])
+                except (ValueError, OSError, KeyError) as exc:
+                    row["judge_error"] = str(exc)
+            model_run["judge_mean"] = sum(scores) / len(scores) if scores else None
+            model_run["judge_count"] = len(scores)
         if "runs" in result:
             pairs=[]
             for first, second in combinations(result["runs"],2):
@@ -131,6 +144,6 @@ def regrade(run_id: UUID):
         result=saved(run_id)
         if result.get("evidence_type")!="custom_prompt":
             raise HTTPException(422,"Only prompt runs support rubric grading.")
-        grade_remaining(result,result.get("judge_reference",""))
+        grade_remaining(result)
         save(result)
         return result

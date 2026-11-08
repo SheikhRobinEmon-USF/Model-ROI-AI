@@ -166,3 +166,6 @@ With Ollama running, install `gemma4:e4b` and `phi4-mini:3.8b` using `ollama pul
 ## Share a live tester session from your Mac
 
 Open Ollama and keep the Mac awake. In your Git clone, run `brew install cloudflared` once, then `python3 scripts/start_pilot.py`. This uses the existing .venv from the local launcher. Share the printed HTTPS trycloudflare.com link and tester code privately. Keep Terminal running; Control+C ends the session. Each restart creates a new code and temporary link. The tester interface handles one prompt comparison at a time and holds results in the visitor's session. A Quick Tunnel is a development/testing service. Hosting and model API fees are zero; your computer and network supply inference.
+
+### Automatic quality judge
+Run `ollama pull qwen3.8:27b` on the Ollama host. Prompt comparisons automatically send the original question and each delivered answer to this local judge. The judge supplies the displayed 0–10 score and explanation. Scores from previously saved reports retain their original attribution. Built-in benchmark pass rates continue to use their answer keys.

@@ -6,7 +6,7 @@ from threading import Lock
 import streamlit as st
 
 from app.ui.comparison import MODELS
-from app.ui.prompt_compare import display, evaluate
+from app.ui.prompt_compare import display, evaluate, grade_remaining
 
 st.set_page_config(page_title="ModelROI | Tester pilot", layout="wide")
 st.title("Compare three local models")
@@ -32,6 +32,7 @@ if st.button("Compare answers", type="primary", disabled=not prompt.strip() or n
         try:
             with st.spinner("Running your question on the host Mac…"):
                 st.session_state.report = evaluate(prompt, models)
+                grade_remaining(st.session_state.report)
         finally:
             lock.release()
     else:

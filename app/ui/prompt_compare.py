@@ -6,7 +6,7 @@ from uuid import uuid4
 import pandas as pd
 import streamlit as st
 
-from app.graders.flow import JUDGE, rating
+from app.graders.qwen import JUDGE, rating
 from app.providers.local import generate, installed_match, request
 from app.storage.history import save
 from app.ui.comparison import MODELS
@@ -28,8 +28,7 @@ def evaluate(prompt, models):
             "evidence_type": "custom_prompt", "prompt": prompt, "answers": rows}
 
 
-def grade_remaining(report, reference):
-    report["judge_reference"] = reference
+def grade_remaining(report):
     for row in report["answers"]:
         if not row.get("output", "").strip() or row["status"] == "Error" or "judge" in row:
             continue
@@ -37,20 +36,20 @@ def grade_remaining(report, reference):
             question = report["prompt"]
             if row["status"] == "Truncated":
                 question += "\nEvaluator note: generation stopped at the output limit. Evaluate only the delivered portion and account for missing content."
-            row["judge"] = rating(question, row["output"], reference)
+            row["judge"] = rating(question, row["output"])
             if row["status"] == "Truncated":
                 row["judge"]["scope"] += " (partial answer)"
             row.pop("judge_error", None)
         except (ValueError, OSError, KeyError) as exc:
-            row["judge_error"] = f"Flow-Judge could not score this answer ({exc})."
+            row["judge_error"] = f"Qwen3.8 27B could not score this answer ({exc})."
 
 
 def display(report, allow_grading=False):
-    st.subheader("Answer quality · Flow-Judge")
+    st.subheader("Answer quality")
     pending = any(row.get("output") and row["status"] != "Error" and "judge" not in row for row in report["answers"])
     if allow_grading and pending and st.button("Grade saved answers", key="grade_"+report["run_id"]):
         with st.spinner("Grading the existing responses…"):
-            grade_remaining(report, report.get("judge_reference", ""))
+            grade_remaining(report)
             save(report)
     for row in report["answers"]:
         name = MODELS[row["requested_model"]]
@@ -58,6 +57,9 @@ def display(report, allow_grading=False):
         if verdict:
             st.progress(verdict["score"]/10, text=f"{name} · {verdict['score']:.1f}/10 · {verdict['scope']}")
             with st.expander(f"{name} grading details"):
+                st.caption(verdict.get("model", "Historical judge"))
+                if verdict.get("reason"):
+                    st.write(verdict["reason"])
                 for label, item in verdict["criteria"].items():
                     st.write(f"{label} ({item['rating']}/5) · {item['reason']}")
         elif row["status"] != "Answered":
@@ -123,16 +125,11 @@ def panel(enabled):
             st.code("\n".join("ollama pull "+tag for tag in missing), language="bash")
     else:
         st.info("Start the local launcher to compare models on your machine.")
-    use_judge = st.checkbox("Rate answers with Flow-Judge", value=enabled)
-    reference = ""
-    if use_judge:
-        reference = st.text_area("Reference answer or verified facts (optional)", max_chars=1800)
-        st.caption("Without a reference, the meter covers completion and clarity only. Ratings are provisional.")
+    st.caption("Qwen3.8 27B automatically rates each answer out of 10.")
     if st.button("Compare answers", type="primary", disabled=not enabled or not models or not prompt.strip()):
         with st.spinner("Running the same question through each selected model…"):
             report = evaluate(prompt, models)
-            if use_judge:
-                grade_remaining(report, reference)
+            grade_remaining(report)
             save(report)
             st.session_state.result = report
     report = st.session_state.get("result", {})
