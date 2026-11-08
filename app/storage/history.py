@@ -1,68 +1,121 @@
-"""Local JSON run history with atomic writes and UUID-only lookup."""
-from functools import lru_cache
+"""Transactional local history and compact benchmark measurements."""
+from contextlib import contextmanager
 import json
+import logging
 import os
 from pathlib import Path
+import sqlite3
 from uuid import UUID
-import tempfile
+
 
 def directory():
-    path=Path(os.environ.get('MODELROI_HISTORY_DIR',str(Path.home()/'.modelroi'/'runs')))
-    path.mkdir(parents=True,exist_ok=True,mode=0o700)
+    path = Path(os.environ.get("MODELROI_HISTORY_DIR", str(Path.home() / ".modelroi" / "runs")))
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
     return path
 
-def save(result):
-    run_id=str(UUID(result['run_id']))
-    folder=directory()
-    fd,name=tempfile.mkstemp(dir=folder,suffix='.tmp')
-    try:
-        with os.fdopen(fd,'w') as f:
-            json.dump(result,f,indent=2,allow_nan=False)
-        os.replace(name,folder/f'{run_id}.json')
-    finally:
-        if os.path.exists(name):
-            os.unlink(name)
+
+def _write(db, report):
+    run_id = str(UUID(report["run_id"]))
+    summary = {key: report[key] for key in ("run_id", "started_at", "model_id")}
+    if report.get("evidence_type") == "custom_prompt":
+        summary.update(title=" ".join(report["prompt"].split())[:75], parent_id=report.get("parent_id"),
+                       chat_name=report.get("chat_name"), pinned=report.get("pinned"))
+    db.execute("INSERT OR REPLACE INTO runs VALUES (?, ?, ?, ?)", (
+        run_id, report["started_at"], json.dumps(summary), json.dumps(report, allow_nan=False)))
+    db.execute("DELETE FROM measurements WHERE run_id=?", (run_id,))
+    for run in report.get("runs", [report]):
+        rows = run.get("results", [])
+        db.executemany("INSERT INTO measurements VALUES (?, ?, ?, ?, ?)", (
+            (run_id, run["model_id"], int(bool(row.get("passed"))),
+             (row.get("judge") or {}).get("score"), row.get("latency_ms") if row.get("status") == "completed" else None)
+            for row in rows))
     return run_id
 
-def load(run_id):
-    return json.loads((directory()/f'{UUID(run_id)}.json').read_text())
 
-@lru_cache(maxsize=1024)
-def _summary(path, inode, modified, size):
-    # Atomic replacement changes the file identity when a saved run is regraded.
-    UUID(path.stem)
-    data = json.loads(path.read_text())
-    summary = {key: data[key] for key in ("run_id", "started_at", "model_id")}
-    if data.get("evidence_type") == "custom_prompt":
-        summary.update(title=" ".join(data["prompt"].split())[:75], parent_id=data.get("parent_id"),
-                       chat_name=data.get("chat_name"), pinned=data.get("pinned"))
-    return summary
+@contextmanager
+def connection():
+    folder = directory()
+    db = sqlite3.connect(folder / "history.sqlite3", timeout=30)
+    try:
+        if db.execute("PRAGMA user_version").fetchone()[0] == 0:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute("PRAGMA user_version").fetchone()[0] == 0:
+                db.execute("CREATE TABLE runs(id TEXT PRIMARY KEY, started TEXT, summary TEXT, report TEXT)")
+                db.execute("CREATE INDEX recent ON runs(started DESC)")
+                db.execute("CREATE TABLE measurements(run_id TEXT, model TEXT, passed INTEGER, score REAL, latency REAL)")
+                db.execute("CREATE INDEX by_run ON measurements(run_id)")
+                for path in folder.glob("*.json"):
+                    try:
+                        report = json.loads(path.read_text())
+                        if str(UUID(path.stem)) != report["run_id"]:
+                            raise ValueError("Run ID mismatch")
+                    except (ValueError, KeyError, TypeError) as exc:
+                        logging.warning("Skipping invalid legacy report %s: %s", path.name, exc)
+                        continue
+                    _write(db, report)
+                db.execute("PRAGMA user_version=1")
+            db.commit()
+        with db:
+            yield db
+    finally:
+        db.close()
+
+
+def save(result):
+    with connection() as db:
+        return _write(db, result)
+
+
+def load(run_id):
+    key = str(UUID(run_id))
+    with connection() as db:
+        row = db.execute("SELECT report FROM runs WHERE id=?", (key,)).fetchone()
+    if row is None:
+        raise FileNotFoundError(key)
+    return json.loads(row[0])
 
 
 def list_runs():
-    records=[]
-    for path in directory().glob('*.json'):
-        try:
-            stat = path.stat()
-            records.append(dict(_summary(path, stat.st_ino, stat.st_mtime_ns, stat.st_size)))
-        except (ValueError,KeyError,OSError):
-            continue
-    return sorted(records,key=lambda r:r['started_at'],reverse=True)
+    with connection() as db:
+        return [json.loads(row[0]) for row in db.execute("SELECT summary FROM runs ORDER BY started DESC")]
 
 
-def delete_chat(leaf, records):
-    """Remove the leaf and its ancestors up to the first shared turn."""
-    chats = {row["run_id"]: row for row in records if "title" in row}
-    children = {}
-    for row in chats.values():
-        children.setdefault(row["parent_id"], set()).add(row["run_id"])
-    removed = []
-    while leaf in chats and not children.get(leaf):
-        parent = chats[leaf]["parent_id"]
-        removed.append(leaf)
-        children[parent].discard(leaf)
-        leaf = parent
-    # Ancestors first so an interrupted deletion can still be retried by leaf ID.
-    for run_id in reversed(removed):
-        (directory() / f"{UUID(run_id)}.json").unlink(missing_ok=True)
+def delete_chat(leaf):
+    with connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        records = [json.loads(r[0]) for r in db.execute("SELECT summary FROM runs")]
+        chats = {r["run_id"]: r for r in records if "title" in r}
+        children = {}
+        for row in chats.values():
+            children.setdefault(row["parent_id"], set()).add(row["run_id"])
+        removed = []
+        while leaf in chats and not children.get(leaf):
+            parent = chats[leaf]["parent_id"]
+            removed.append(leaf)
+            children[parent].discard(leaf)
+            leaf = parent
+        for key in removed:
+            (directory() / f"{UUID(key)}.json").unlink(missing_ok=True)
+            db.execute("DELETE FROM runs WHERE id=?", (key,))
     return removed
+
+
+def benchmark_analytics():
+    # Import only on a dashboard request; the offline query needs no DuckDB extensions.
+    import duckdb
+    with connection() as db, duckdb.connect(config={"threads": 1, "memory_limit": "128MB"}) as analysis:
+        analysis.execute("CREATE TABLE cases(run_id VARCHAR, model VARCHAR, passed INTEGER, score DOUBLE, latency DOUBLE)")
+        rows = db.execute("SELECT run_id, model, passed, score, latency FROM measurements")
+        while batch := rows.fetchmany(1000):
+            analysis.execute("""
+                INSERT INTO cases SELECT unnest(?::VARCHAR[]), unnest(?::VARCHAR[]),
+                    unnest(?::INTEGER[]), unnest(?::DOUBLE[]), unnest(?::DOUBLE[])
+            """, [list(column) for column in zip(*batch)])
+        result = analysis.execute("""
+            SELECT model, count(DISTINCT run_id) AS runs, count(*) AS attempts,
+                   sum(passed) AS passed, count(score) AS graded, avg(score) AS mean_grade,
+                   median(latency) AS median_ms
+            FROM cases GROUP BY model ORDER BY model
+        """)
+        keys = [col[0] for col in result.description]
+        return [dict(zip(keys, row)) for row in result.fetchall()]

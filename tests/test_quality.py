@@ -80,3 +80,17 @@ def test_live_phases_match_actual_work(tmp_path, monkeypatch):
     events = [json.loads(line) for line in response.text.splitlines()]
     assert [e["phase"] for e in events if e["event"] == "status"] == ["prepare", "generate", "grade", "save"]
     assert events[-1]["event"] == "complete"
+
+
+def test_reference_is_saved_and_only_used_for_grading(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODELROI_ENABLE_LOCAL", "true")
+    monkeypatch.setenv("MODELROI_HISTORY_DIR", str(tmp_path))
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"origin": "http://127.0.0.1"})
+    with patch("app.ui.prompt_compare.generate", return_value={"output": "Blue"}) as candidate, patch(
+        "app.graders.quality.request", return_value=reply({"score": 10, "reason": "Matches."})
+    ) as judge:
+        report = client.post("/studio/prompt", json={"models": ["qwen3:4b"], "prompt": "Color?",
+                            "reference_answer": "Royal blue"}).json()
+    candidate.assert_called_once_with("qwen3:4b", "Color?")
+    assert "Royal blue" in judge.call_args.args[1]["messages"][1]["content"]
+    assert client.get("/studio/history/" + report["run_id"]).json()["reference_answer"] == "Royal blue"

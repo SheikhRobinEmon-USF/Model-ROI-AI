@@ -168,3 +168,9 @@ Open Ollama and keep the Mac awake. In your Git clone, run `brew install cloudfl
 
 ### Automatic quality judge
 Run `ollama pull gpt-oss:20b`. The judge grades each delivered answer directly from 0 to 10 and explains the score. Historical reports keep their original grades.
+
+### Local storage and migration
+
+The first history read imports valid legacy UUID-named JSON reports into `history.sqlite3` in `~/.modelroi/runs` (or `MODELROI_HISTORY_DIR`). New writes go to SQLite. Old JSON files remain as migration originals; deleting an imported conversation also removes its corresponding original files. For a complete backup, stop the studio and copy the history directory. Restart with that directory to restore it.
+
+Open History and choose **Analyze saved benchmarks** to run DuckDB locally on the benchmark measurements. The analytical database exists only for that query. No separate server, account or network extension is required.

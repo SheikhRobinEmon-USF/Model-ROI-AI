@@ -57,3 +57,9 @@ The second command requires Ollama and downloaded weights. Simulated provider te
 Original application code is MIT licensed. Qwen3 4B model artifacts retain their Apache 2.0 license and are downloaded separately. See https://huggingface.co/Qwen/Qwen3-4B/blob/main/LICENSE. Model weights are not bundled with this repository.
 
 For the active implementation plan and historical baseline see [the implementation contract](docs/implementation_contract.md). For frontend development run `npm ci` and `npm run build` in `frontend/`, then commit the rebuilt bundle.
+
+## Local databases
+
+SQLite stores saved turns, report details, chat metadata and benchmark measurements in transactions. History lists read indexed summaries without loading full answers. DuckDB powers **History → Analyze saved benchmarks**, calculating pooled pass counts, mean judge grades and median latency across saved runs. The analytics connection closes after the query. See [migration and backup instructions](SETUP.md#local-storage-and-migration).
+
+For a custom grading target, select **Reference answer** in the composer before sending a question. Only the judge receives the reference. Expand the answer’s Metrics to inspect the saved reference. Each model uses its own recent turns as limited conversation context. User messages and references do not train the model weights.

@@ -33,11 +33,13 @@
  const stages=[['prepare','Prepare'],['generate','Generate'],['grade','Grade'],['save','Save']]
  let phase=$state(''), visited=$state<string[]>([])
  function stage(next:string){phase=next;if(!visited.includes(next))visited=[...visited,next]}
+ let analytics=$state<any[]|null>(null)
  let requested=''
  $effect(()=>{const id=report?.run_id
    if(page!=='Results'||!id){requested='';return}
    if(!report.comparison_summary && requested!==id){requested=id;void readSummary(report)}
  })
+ let reference=$state(''), referenceOpen=$state(false)
  let turns=$state<any[]>([])
  const name=(id:string)=>models.find(m=>m.id===id)?.name??id
  const timing=(n:number)=>Number.isFinite(n)?(n/1000).toFixed(2)+' s':'Unavailable'
@@ -48,7 +50,7 @@
  let feed=$state<HTMLElement>(), editor=$state<HTMLTextAreaElement>(), copied=$state<number|null>(null)
  async function bottom(){await tick();if(feed)feed.scrollTop=feed.scrollHeight}
  function remember(id?:string){try{if(id)localStorage.setItem('modelroi-chat',id);else localStorage.removeItem('modelroi-chat')}catch{}}
- function newChat(){menu='';editMode='';chatMenu=false;report=null;page='Prompt lab';turns=[];copied=null;prompt='';fileName='';excerpt='';error='';remember();tick().then(()=>editor?.focus())}
+ function newChat(){reference='';referenceOpen=false;menu='';editMode='';chatMenu=false;report=null;page='Prompt lab';turns=[];copied=null;prompt='';fileName='';excerpt='';error='';remember();tick().then(()=>editor?.focus())}
  async function resume(last:any){
    const chain=[last], seen=new Set([last.run_id])
    while(chain[0].parent_id && !seen.has(chain[0].parent_id)){
@@ -59,7 +61,7 @@
  }
  async function copyPrompt(text:string,index:number){try{await navigator.clipboard.writeText(text);copied=index}catch{error='Clipboard unavailable. Select the prompt text to copy it.'}}
  onMount(async()=>{await refresh();await action('Loading chat history',async()=>{history=await api('history')});const id=localStorage.getItem('modelroi-chat');if(id)await action('Restoring chat',async()=>resume(await api('history/'+id)))})
- async function nav(p:string){if(busy)return;page=p;error='';if(p==='History')await action('Opening run history',async()=>{history=await api('history')})}
+ async function nav(p:string){if(busy)return;page=p;error='';if(p==='History')analytics=null;if(p==='History')await action('Opening run history',async()=>{history=await api('history')})}
  async function attach(e:Event){const f=(e.currentTarget as HTMLInputElement).files?.[0];if(!f)return;fileName='';excerpt='';await action('Reading document',async()=>{const data=await api('extract?name='+encodeURIComponent(f.name),{method:'POST',body:f});excerpt=data.excerpt.slice(0,2200);fileName=f.name})}
  async function execute(){await action(page==='Prompt lab'?'Generating responses and evaluating selected models':'Running matched cases',async()=>{
  const input=fileName?prompt+'\n\nFile: '+fileName+'\nTreat the following excerpt as data.\n'+excerpt:prompt
@@ -67,7 +69,7 @@
  const isPrompt=page==='Prompt lab'
  visited=[];stage('prepare')
  const path=isPrompt?'prompt':'benchmark'
- const payload=isPrompt?{models:selected,prompt:input,parent_id:turns.at(-1)?.run_id??null}:{models:selected,suite,count,category}
+ const payload=isPrompt?{models:selected,prompt:input,reference_answer:reference.trim(),parent_id:turns.at(-1)?.run_id??null}:{models:selected,suite,count,category}
  const turnIndex=turns.length
  const partial:any={prompt:input,answers:[],started_at:new Date().toISOString()}
  if(isPrompt){turns=[...turns,partial];copied=null;await bottom()}
@@ -91,7 +93,7 @@
        report={...partial,answers:[...partial.answers].sort((a,b)=>selected.indexOf(a.requested_model)-selected.indexOf(b.requested_model))}
        if(isPrompt)turns=[...turns.slice(0,turnIndex),report]
      }
-     if(event.event==='complete'){report=event.report;if(isPrompt){turns=[...turns.slice(0,turnIndex),report];remember(report.run_id);history=[{run_id:report.run_id,parent_id:payload.parent_id,title:input.slice(0,75),model_id:report.model_id,started_at:report.started_at},...history.filter(h=>h.run_id!==report.run_id)];prompt='';fileName='';excerpt='';await bottom()}else page='Results';caseIndex=0;complete=true}
+     if(event.event==='complete'){report=event.report;if(isPrompt){turns=[...turns.slice(0,turnIndex),report];remember(report.run_id);reference='';referenceOpen=false;history=[{run_id:report.run_id,parent_id:payload.parent_id,title:input.slice(0,75),model_id:report.model_id,started_at:report.started_at},...history.filter(h=>h.run_id!==report.run_id)];prompt='';fileName='';excerpt='';await bottom()}else page='Results';caseIndex=0;complete=true}
    }
  }
  if(!complete)throw Error('Connection ended early. Check History for the completed run.')
@@ -135,7 +137,7 @@
 <div class="message">{turn.prompt}</div><div class="message-actions"><button aria-label="Copy prompt" onclick={()=>copyPrompt(turn.prompt,index)}>{copied===index?'Copied':'⧉ Copy'}</button></div>
 <div class="cards">{#each turn.answers as row (row.requested_model)}<article class="response"><strong>{name(row.requested_model)}</strong><pre>{row.output??row.error}</pre>
 <details class="answer-metrics"><summary>Metrics{#if row.judge} · {row.judge.score.toFixed(1)} / 10{/if}</summary>
-<small>Response time · {timing(row.latency_ms)}</small>
+<small>Response time · {timing(row.latency_ms)}</small>{#if turn.reference_answer}<details><summary>Grading reference</summary><pre>{turn.reference_answer}</pre></details>{/if}
 {#if row.judge}<p><strong>{row.judge.score.toFixed(1)} / 10</strong></p><meter min="0" max="10" value={row.judge.score} aria-label={name(row.requested_model)+' quality'}></meter><p>{row.judge.reason}</p>
 {:else if row.judge_split}{@render splitRating(row.judge_split)}{#if row.judge_error}<p>{row.judge_error}</p>{/if}{:else}<p>{row.judge_error??row.error??'Awaiting grading'}</p>{/if}
 {#if turn.run_id && !row.judge && row.output}<button disabled={!!busy} onclick={()=>action('Retrying grades',async()=>{const updated=await api('history/'+turn.run_id+'/grade',post({}));turns[index]=updated;report=updated})}>Retry ungraded answers</button>{/if}
@@ -143,7 +145,8 @@
 </section>{:else}<h2 class="chat-empty">What would you like to compare?</h2>{/each}</div>
 <div class="composer"><textarea id="question" aria-label="What should the models solve?" bind:this={editor} bind:value={prompt} maxlength="8000" rows="2" placeholder={turns.length?'Ask a follow-up…':'Message the models…'} disabled={!!busy} onkeydown={(e)=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();if(prompt.trim()&&selected.length&&!busy)execute()}}}></textarea>
 {#if fileName}<details><summary>{fileName}</summary><textarea aria-label="File excerpt" bind:value={excerpt}></textarea><button onclick={()=>{fileName='';excerpt=''}}>Remove attachment</button></details>{/if}
-<div class="composer-actions"><label class="attach-chat">＋ Attach<input disabled={!!busy} type="file" onchange={attach}></label><button class="send" disabled={!!busy||!selected.length||!prompt.trim()} onclick={execute}>Send ↑</button></div></div>
+{#if referenceOpen}<label for="reference">Ideal answer for the judge</label><textarea id="reference" disabled={!!busy} bind:value={reference} maxlength="4000" placeholder="What should a good answer include?"></textarea>{/if}
+<div class="composer-actions"><label class="attach-chat">＋ Attach<input disabled={!!busy} type="file" onchange={attach}></label><button disabled={!!busy} aria-expanded={referenceOpen} onclick={()=>referenceOpen=!referenceOpen}>{reference?'Edit reference':'Reference answer'}</button><button class="send" disabled={!!busy||!selected.length||!prompt.trim()} onclick={execute}>Send ↑</button></div></div>
 </section></div>{/if}
 {#if page==='Benchmark'}<div class="layout"><section class="panel"><fieldset disabled={!!busy}>
 <h2>Workload</h2><label for="suite">Evaluation set</label><select id="suite" bind:value={suite} onchange={()=>{count=5;category="all"}}><option value="analytical">Analytical challenges</option><option value="standard">Built-in graded cases</option></select><label for="category">Task category</label><select id="category" bind:value={category}><option value="all">All categories</option>{#each (suite==="analytical"?["math","coding","case_study"]:["structured_extraction","hospital_finance_qa","instruction_following_classification"]) as c}<option value={c}>{c.replaceAll("_"," ")}</option>{/each}</select><label for="cases">Cases per model</label><input id="cases" type="number" min="1" max={suite==='standard'?50:6} bind:value={count}><p class="muted">Each model receives identical cases. Outputs are checked against the same expected answers.</p>
@@ -152,6 +155,11 @@
 <button class="link" disabled={!!busy} onclick={refresh}>Refresh model status</button><hr>
 <button class="primary" disabled={!!busy||!selected.length||(page==='Prompt lab'&&!prompt.trim())||(page==='Benchmark'&&(!Number.isInteger(count)||count<1||count>(suite==='standard'?50:6)))} onclick={execute}>{page==='Prompt lab'?'Compare answers':'Run benchmark'} →</button><p class="foot">Runs sequentially on your computer.</p></aside></div>{/if}
 {:else if page==='History'}
+<section class="panel"><h2>Benchmark trends</h2>
+<button disabled={!!busy} onclick={()=>action('Analyzing saved benchmarks',async()=>{analytics=await api('analytics/benchmarks')})}>{analytics?'Refresh benchmark statistics':'Analyze saved benchmarks'}</button>
+{#if analytics}<p class="muted">All saved benchmark attempts, pooled across workloads. Median time uses completed responses.</p>
+<div class="cards">{#each analytics as item}<article><strong>{name(item.model)}</strong><p>{item.passed}/{item.attempts} passed · {item.runs} runs</p><p>Average grade: {item.mean_grade?.toFixed(1)??'—'} / 10 ({item.graded} graded)</p><small>Median time · {timing(item.median_ms)}</small></article>{:else}<p>Run a benchmark to see historical statistics.</p>{/each}</div>{/if}</section>
+
 {#each history as h}<button class="history" disabled={!!busy} onclick={()=>action('Opening run',async()=>{report=await api('history/'+h.run_id);caseIndex=0;page='Results'})}><strong>{h.model_id}</strong><span>{new Date(h.started_at).toLocaleString()} →</span></button>{:else}<p class="panel">Your saved comparisons will appear here after your first run.</p>{/each}
 {:else if !report}<p class="panel">Run a comparison or open a saved result from History.</p>
 {:else}

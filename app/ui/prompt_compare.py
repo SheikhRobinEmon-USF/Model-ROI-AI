@@ -51,6 +51,9 @@ def grade_remaining(report):
                 question = json.dumps(row["conversation_context"], ensure_ascii=False) + "\nCurrent question: " + question
             if row["status"] == "Truncated":
                 question += "\nEvaluator note: generation stopped at the output limit. Evaluate only the delivered portion and account for missing content."
+            if report.get("reference_answer"):
+                question = json.dumps({"task": question, "reference_answer": report["reference_answer"],
+                                       "grading_guidance": "Compare meaning, correctness and completeness against the reference. Accept valid equivalent answers."}, ensure_ascii=False)
             emit("status", phase="grade", message=f"gpt-oss-20b is grading {MODELS.get(row['requested_model'], row['requested_model'])}")
             row["judge"] = rate_once(rating, question, row["output"])
             if row["status"] == "Truncated":

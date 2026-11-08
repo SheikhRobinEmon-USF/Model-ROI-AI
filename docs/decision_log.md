@@ -11,3 +11,7 @@ Reservations retain unknown usage liability across restarts and cancellation. Th
 
 ## SDK retry ownership
 The future provider runner must disable SDK automatic retries and record every attempt itself, because otherwise retry costs are hidden from the ledger. Source: https://github.com/openai/openai-python (reviewed 2026-11-06).
+
+## SQLite history and DuckDB analytics
+
+SQLite is the authoritative local store. A single transaction saves both the full exportable report and its analytical measurements. Historical dashboard queries load only model identifiers and numeric measurements into a temporary DuckDB connection. This keeps prompts out of the analytical engine and avoids reconciling two persistent databases.

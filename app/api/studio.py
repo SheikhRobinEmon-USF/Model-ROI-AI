@@ -22,7 +22,7 @@ from app.datasets.attachments import extract
 from app.datasets.validate import validate_jsonl
 from app.execution.local_run import run
 from app.providers.local import installed_match, request
-from app.storage.history import delete_chat, load, list_runs, save
+from app.storage.history import benchmark_analytics, delete_chat, load, list_runs, save
 from app.ui.comparison import MODELS, compare, mix_workloads
 from app.ui.prompt_compare import evaluate, grade_remaining
 
@@ -60,6 +60,7 @@ class Settings(BaseModel):
         return self
 
 class Question(Settings):
+    reference_answer: str = Field(default="", max_length=4000)
     parent_id: UUID | None = None
     prompt: str = Field(min_length=1,max_length=8000)
 
@@ -90,6 +91,8 @@ def prompt(body: Question):
         emit("status", phase="prepare", message="Preparing the prompt and conversation context")
         result = (evaluate(body.prompt, body.models, previous) if previous
                   else evaluate(body.prompt, body.models))
+        if body.reference_answer.strip():
+            result["reference_answer"] = body.reference_answer.strip()
         if body.parent_id:
             result["parent_id"] = str(body.parent_id)
         grade_remaining(result)
@@ -173,7 +176,7 @@ def edit_chat(run_id: UUID, body: ChatEdit):
         if any(row.get("parent_id") == str(run_id) for row in records):
             raise HTTPException(409, "This chat has newer turns. Refresh and select its latest turn.")
         if body.action == "delete":
-            return {"removed": delete_chat(str(run_id), records)}
+            return {"removed": delete_chat(str(run_id))}
         if body.action == "rename":
             title = body.title.strip()
             if not title:
@@ -249,3 +252,8 @@ def live_prompt(body: Question):
 @router.post("/live/benchmark")
 def live_benchmark(body: Benchmark):
     return stream_run(benchmark, body)
+
+
+@router.get("/analytics/benchmarks")
+def historical_benchmarks():
+    return benchmark_analytics()
