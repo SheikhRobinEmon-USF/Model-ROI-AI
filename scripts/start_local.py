@@ -1,4 +1,5 @@
 """Cross-platform launcher. Run from a checkout with Python 3.12+."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -33,7 +34,12 @@ def main():
     executable=envdir/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
     if not executable.exists():
         subprocess.run([sys.executable,'-m','venv',str(envdir)],check=True)
-    subprocess.run([str(executable),'-m','pip','install','-e',str(ROOT)],check=True)
+    signature = hashlib.sha256((ROOT/"pyproject.toml").read_bytes() + str(ROOT).encode() +
+                               sys.version.encode()).hexdigest()
+    marker = envdir / "modelroi-installed"
+    if not marker.exists() or marker.read_text() != signature:
+        subprocess.run([str(executable), "-m", "pip", "install", "-e", str(ROOT)], check=True)
+        marker.write_text(signature)
     environment=os.environ.copy()
     environment['MODELROI_ENABLE_LOCAL']='true'
     with socket.socket() as probe:

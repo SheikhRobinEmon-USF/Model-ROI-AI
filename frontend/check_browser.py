@@ -8,7 +8,14 @@ with sync_playwright() as pw:
         errors=[]
         p.on('pageerror',lambda e:errors.append(str(e)))
         p.route('**/studio/models',lambda r:r.fulfill(json=models))
-        p.route('**/studio/prompt',lambda r:r.fulfill(json={'prompt':r.request.post_data_json['prompt'],'started_at':'2026-11-08T00:00:00Z','run_id':'test','answers':[dict(requested_model=m['id'],status='Answered',output='Response',latency_ms=200,judge=dict(score=7.5,scope='Completion and clarity',criteria={})) for m in models]}))
+        def comparison(route):
+            answers=[dict(requested_model=m['id'],status='Answered',output='Response',latency_ms=200,
+                          judge=dict(score=7.5,scope='Quality',criteria={})) for m in models]
+            report=dict(prompt=route.request.post_data_json['prompt'],started_at='2026-11-08T00:00:00Z',
+                        run_id='test',answers=answers)
+            events=[dict(event='answer',row=row) for row in answers]+[dict(event='complete',report=report)]
+            route.fulfill(content_type='application/x-ndjson',body=''.join(json.dumps(e)+'\n' for e in events))
+        p.route('**/studio/live/prompt',comparison)
         p.goto('http://127.0.0.1:8598/')
         p.get_by_label('What should the models solve?').fill('Explain the results.')
         p.get_by_role('button',name='Compare answers').click()

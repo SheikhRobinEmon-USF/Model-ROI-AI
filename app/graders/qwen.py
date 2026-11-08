@@ -21,10 +21,15 @@ Return JSON with score and reason."""
 
 def rating(question, answer):
     evidence = json.dumps({"original_task": question, "candidate_answer": answer}, ensure_ascii=False)
+    # Budget conservatively by UTF-8 bytes plus output and chat-template headroom.
+    needed = len((INSTRUCTIONS + evidence).encode()) + 1384
+    context = next((size for size in (8192, 16384) if size >= needed), None)
+    if context is None:
+        raise ValueError("Saved prompt and answer exceed the judge context budget.")
     payload = {"model": JUDGE, "stream": False, "think": False, "format": SCHEMA,
                "messages": [{"role": "system", "content": INSTRUCTIONS},
                             {"role": "user", "content": evidence}],
-               "options": {"temperature": 0, "num_ctx": 16384, "num_predict": 1024}}
+               "options": {"temperature": 0, "num_ctx": context, "num_predict": 1024}}
     if len((INSTRUCTIONS + evidence).encode()) > 15000:
         raise ValueError("Saved prompt and answer exceed the judge context budget.")
     try:
@@ -43,4 +48,6 @@ def rating(question, answer):
     if not isinstance(reason, str) or not reason.strip():
         raise ValueError("Qwen omitted its grading explanation.")
     return {"model": JUDGE, "rubric_version": "qwen-v1", "score": score,
+            "ollama_duration_ns": response.get("total_duration"),
+            "ollama_load_ns": response.get("load_duration"), "context_tokens": context,
             "scope": "Qwen3.8 27B quality estimate", "reason": reason.strip(), "criteria": {}}

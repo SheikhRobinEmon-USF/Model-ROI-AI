@@ -1,5 +1,11 @@
 """Local studio API, enabled only by the desktop launcher."""
 import os
+import json
+from queue import Queue
+from threading import Thread
+from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
+from app.execution.performance import current, run_scope, emit, rate_once
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
@@ -36,7 +42,11 @@ def exclusive():
     if not lock.acquire(False):
         raise HTTPException(409,"Another evaluation is running.")
     try:
-        yield
+        if current.get() is None:
+            with run_scope():
+                yield
+        else:
+            yield
     finally:
         lock.release()
 
@@ -82,7 +92,11 @@ def benchmark(body: Benchmark):
         if not cases:
             raise HTTPException(422,"No cases match that category.")
         cases=mix_workloads(cases)[:body.count]
-        result=compare(cases,body.models) if len(body.models)>1 else run(cases,model=body.models[0])
+        if len(body.models)>1:
+            result=compare(cases,body.models,progress=lambda fraction,model:emit("status",message=f"Evaluating {model} · {fraction:.0%} of generations complete"))
+        else:
+            result=run(cases,model=body.models[0],progress=lambda done,total:emit("status",message=f"Evaluated {done} of {total} cases"))
+        emit("status",message="Scoring benchmark answers with Qwen3.8 27B")
         for model_run in result.get("runs", [result]):
             scores = []
             for row in model_run["results"]:
@@ -92,7 +106,7 @@ def benchmark(body: Benchmark):
                     task = row["input"]
                     if row.get("done_reason") == "length":
                         task += "\nEvaluator note: the delivered answer was truncated."
-                    row["judge"] = rating(task, row["output"])
+                    row["judge"] = rate_once(rating, task, row["output"])
                     scores.append(row["judge"]["score"])
                 except (ValueError, OSError, KeyError) as exc:
                     row["judge_error"] = str(exc)
@@ -123,7 +137,7 @@ async def attachment(req: Request, name: str):
             raise HTTPException(413,"Choose a file under 5 MB.")
         data.extend(part)
     try:
-        return {"excerpt":extract(name,bytes(data))}
+        return {"excerpt":await run_in_threadpool(extract, name, bytes(data))}
     except Exception as exc:
         raise HTTPException(422,f"Cannot read file: {exc}") from exc
 
@@ -147,3 +161,32 @@ def regrade(run_id: UUID):
         grade_remaining(result)
         save(result)
         return result
+
+def stream_run(operation, body):
+    events = Queue()
+
+    def work():
+        try:
+            with run_scope(events.put):
+                result = operation(body)
+            events.put({"event":"complete", "report":result})
+        except Exception as exc:
+            events.put({"event":"error", "message":str(getattr(exc, "detail", exc))})
+        finally:
+            events.put(None)
+
+    def lines():
+        Thread(target=work, daemon=True).start()
+        while (event := events.get()) is not None:
+            yield json.dumps(event, allow_nan=False) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson",
+                             headers={"Cache-Control":"no-store"})
+
+@router.post("/live/prompt")
+def live_prompt(body: Question):
+    return stream_run(prompt, body)
+
+@router.post("/live/benchmark")
+def live_benchmark(body: Benchmark):
+    return stream_run(benchmark, body)

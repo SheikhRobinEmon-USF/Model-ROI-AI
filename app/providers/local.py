@@ -1,4 +1,5 @@
 """Local-only model probe. No remote URL or paid-provider fallback."""
+from app.execution.performance import current
 import argparse
 import json
 from time import perf_counter
@@ -24,7 +25,13 @@ def installed_match(model, installed):
     return None
 
 def generate(model, prompt):
-    installed = request('/api/tags').get('models', [])
+    state = current.get()
+    if state is None or state.inventory is None:
+        installed = request('/api/tags').get('models', [])
+        if state is not None:
+            state.inventory = installed
+    else:
+        installed = state.inventory
     match = installed_match(model, installed)
     if match is None:
         raise ValueError(f'{model} is not installed. In Terminal run: ollama pull {model}')

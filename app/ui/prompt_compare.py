@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json
 from uuid import uuid4
 
+from app.execution.performance import emit, rate_once
 import pandas as pd
 import streamlit as st
 
@@ -15,6 +16,7 @@ from app.ui.comparison import MODELS
 def evaluate(prompt, models):
     rows = []
     for tag in models:
+        emit("status", message=f"Generating answer with {MODELS[tag]}")
         row = {"requested_model": tag}
         try:
             response = generate(tag, prompt)
@@ -23,6 +25,7 @@ def evaluate(prompt, models):
         except (ValueError, OSError, KeyError) as exc:
             row.update(status="Error", error=str(exc))
         rows.append(row)
+        emit("answer", row=row.copy())
     return {"run_id": str(uuid4()), "started_at": datetime.now(timezone.utc).isoformat(),
             "model_id": " / ".join(MODELS[tag] for tag in models),
             "evidence_type": "custom_prompt", "prompt": prompt, "answers": rows}
@@ -36,12 +39,14 @@ def grade_remaining(report):
             question = report["prompt"]
             if row["status"] == "Truncated":
                 question += "\nEvaluator note: generation stopped at the output limit. Evaluate only the delivered portion and account for missing content."
-            row["judge"] = rating(question, row["output"])
+            emit("status", message=f"Grading {MODELS[row['requested_model']]}")
+            row["judge"] = rate_once(rating, question, row["output"])
             if row["status"] == "Truncated":
                 row["judge"]["scope"] += " (partial answer)"
             row.pop("judge_error", None)
         except (ValueError, OSError, KeyError) as exc:
             row["judge_error"] = f"Qwen3.8 27B could not score this answer ({exc})."
+        emit("answer", row=row.copy())
 
 
 def display(report, allow_grading=False):
