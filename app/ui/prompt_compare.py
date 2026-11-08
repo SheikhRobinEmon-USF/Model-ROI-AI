@@ -6,6 +6,7 @@ from uuid import uuid4
 import pandas as pd
 import streamlit as st
 
+from app.graders.flow import JUDGE, rating
 from app.providers.local import generate, installed_match, request
 from app.storage.history import save
 from app.ui.comparison import MODELS
@@ -39,6 +40,14 @@ def display(report):
             continue
         seconds = row["latency_ms"] / 1000
         column.caption(f"{row['status']} · {seconds:.2f} s")
+        if "judge" in row:
+            verdict = row["judge"]
+            column.progress(verdict["score"]/10, text=f"{verdict['scope']} · {verdict['score']:.1f}/10")
+            with column.expander("Flow-Judge feedback"):
+                for label, item in verdict["criteria"].items():
+                    st.write(f"{label} ({item['rating']}/5) · {item['reason']}")
+        elif "judge_error" in row:
+            column.warning(row["judge_error"])
         column.text(row["output"])
         timings.append({"Model": name, "Seconds": seconds})
     if timings:
@@ -87,9 +96,24 @@ def panel(enabled):
             st.code("\n".join("ollama pull "+tag for tag in missing), language="bash")
     else:
         st.info("Start the local launcher to compare models on your machine.")
+    use_judge = st.checkbox("Rate answers with Flow-Judge", value=enabled)
+    reference = ""
+    if use_judge:
+        reference = st.text_area("Reference answer or verified facts (optional)", max_chars=1800)
+        st.caption("Without a reference, the meter covers completion and clarity only. Ratings are provisional.")
     if st.button("Compare answers", type="primary", disabled=not enabled or not models or not prompt.strip()):
         with st.spinner("Running the same question through each selected model…"):
             report = evaluate(prompt, models)
+            if use_judge:
+                report["judge_reference"] = reference
+                for row in report["answers"]:
+                    if row["status"] != "Answered":
+                        row["judge_error"] = "A complete answer is required for grading."
+                        continue
+                    try:
+                        row["judge"] = rating(prompt,row["output"],reference)
+                    except (ValueError,OSError,KeyError) as exc:
+                        row["judge_error"] = f"Rating unavailable · {exc}. Check ollama show {JUDGE}"
             save(report)
             st.session_state.result = report
     report = st.session_state.get("result", {})
