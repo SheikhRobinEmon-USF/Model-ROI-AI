@@ -7,11 +7,11 @@ from urllib.request import Request, build_opener, ProxyHandler
 
 BASE = 'http://127.0.0.1:11434'
 
-def request(path, body=None):
+def request(path, body=None, timeout=180):
     data = None if body is None else json.dumps(body).encode()
     req = Request(BASE+path, data=data, headers={'Content-Type':'application/json'})
     # Ignore proxy environment variables for private local prompts.
-    with build_opener(ProxyHandler({})).open(req, timeout=180) as response:
+    with build_opener(ProxyHandler({})).open(req, timeout=timeout) as response:
         return json.load(response)
 
 def installed_match(model, installed):
@@ -24,7 +24,7 @@ def installed_match(model, installed):
                 return entry
     return None
 
-def generate(model, prompt):
+def generate(model, prompt, history=()):
     state = current.get()
     if state is None or state.inventory is None:
         installed = request('/api/tags').get('models', [])
@@ -37,7 +37,7 @@ def generate(model, prompt):
         raise ValueError(f'{model} is not installed. In Terminal run: ollama pull {model}')
     start = perf_counter()
     options = {'temperature': 0, 'num_ctx': 4096, 'num_predict': 512}
-    payload = {'model': match.get('name') or match['model'], 'messages': [{'role': 'user', 'content': prompt}],
+    payload = {'model': match.get('name') or match['model'], 'messages': [*history, {'role': 'user', 'content': prompt}],
                'stream': False, 'options': options}
     # Phi has no configurable thinking mode.
     if model.split(':')[0] != 'phi4-mini':

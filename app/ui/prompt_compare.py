@@ -13,13 +13,25 @@ from app.storage.history import save
 from app.ui.comparison import MODELS
 
 
-def evaluate(prompt, models):
+def evaluate(prompt, models, previous=()):
     rows = []
     for tag in models:
         emit("status", message=f"Generating answer with {MODELS[tag]}")
         row = {"requested_model": tag}
         try:
-            response = generate(tag, prompt)
+            history = []
+            remaining = 3200
+            for turn in previous:
+                prior = next((a.get("output") for a in turn["answers"] if a["requested_model"] == tag), None)
+                if not prior or remaining < 200:
+                    continue
+                question = turn["prompt"][:min(800, remaining // 2)]
+                answer = prior[:remaining - len(question)]
+                history[:0] = [{"role": "user", "content": question}, {"role": "assistant", "content": answer}]
+                remaining -= len(question) + len(answer)
+            response = generate(tag, prompt, history) if history else generate(tag, prompt)
+            if history:
+                row["conversation_context"] = history
             row.update(response)
             row["status"] = "Truncated" if response.get("done_reason") == "length" else "Answered"
         except (ValueError, OSError, KeyError) as exc:
@@ -37,6 +49,8 @@ def grade_remaining(report):
             continue
         try:
             question = report["prompt"]
+            if row.get("conversation_context"):
+                question = json.dumps(row["conversation_context"], ensure_ascii=False) + "\nCurrent question: " + question
             if row["status"] == "Truncated":
                 question += "\nEvaluator note: generation stopped at the output limit. Evaluate only the delivered portion and account for missing content."
             emit("status", message=f"Grading {MODELS[row['requested_model']]}")

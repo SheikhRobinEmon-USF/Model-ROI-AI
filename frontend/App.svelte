@@ -3,6 +3,8 @@
  type Model={id:string,name:string,installed:boolean}
  const pages=['Prompt lab','Benchmark','Results','History']
  let page=$state('Prompt lab'), models=$state<Model[]>([]), selected=$state<string[]>([]), prompt=$state(''), suite=$state('analytical'), category=$state('all'), count=$state(6), busy=$state(''), error=$state(''), report=$state<any>(null), history=$state<any[]>([]), excerpt=$state(''), fileName=$state(''), caseIndex=$state(0)
+ let turns=$state<any[]>([]), inspected=$state<number|null>(null)
+ let metrics=$derived(inspected===null?null:turns[inspected])
  const name=(id:string)=>models.find(m=>m.id===id)?.name??id
  const timing=(n:number)=>Number.isFinite(n)?(n/1000).toFixed(2)+' s':'Unavailable'
  async function api(path:string,init?:RequestInit){const r=await fetch('/studio/'+path,init);const v=await r.json();if(!r.ok)throw Error(typeof v.detail==='string'?v.detail:'Check your inputs and try again.');return v}
@@ -17,12 +19,13 @@
  if(fileName && new TextEncoder().encode(input).length>3300)throw Error('Shorten the question or excerpt to fit the model context.')
  const isPrompt=page==='Prompt lab'
  const path=isPrompt?'prompt':'benchmark'
- const payload=isPrompt?{models:selected,prompt:input}:{models:selected,suite,count,category}
+ const payload=isPrompt?{models:selected,prompt:input,parent_id:turns.at(-1)?.run_id??null}:{models:selected,suite,count,category}
  const response=await fetch('/studio/live/'+path,post(payload))
  if(!response.ok||!response.body)throw Error('Could not start evaluation.')
  const reader=response.body.pipeThrough(new TextDecoderStream()).getReader()
  let buffer='', complete=false
  const partial:any={prompt:input,answers:[],started_at:new Date().toISOString()}
+ const turnIndex=turns.length
  while(true){
    const {value,done}=await reader.read()
    if(done)break
@@ -36,9 +39,9 @@
        partial.answers=partial.answers.filter((a:any)=>a.requested_model!==event.row.requested_model)
        partial.answers.push(event.row)
        report={...partial,answers:[...partial.answers].sort((a,b)=>selected.indexOf(a.requested_model)-selected.indexOf(b.requested_model))}
-       page='Results'
+       if(isPrompt)turns=[...turns.slice(0,turnIndex),report]
      }
-     if(event.event==='complete'){report=event.report;page='Results';caseIndex=0;complete=true}
+     if(event.event==='complete'){report=event.report;if(isPrompt){turns=[...turns.slice(0,turnIndex),report];prompt='';fileName='';excerpt=''}else page='Results';caseIndex=0;complete=true}
    }
  }
  if(!complete)throw Error('Connection ended early. Check History for the completed run.')
@@ -55,9 +58,23 @@
 {#if error}<p role="alert" class="alert">{error}</p>{/if}
 {#if busy}<p class="progress" role="status">{busy}…</p>{/if}
 {#if page==='Prompt lab'||page==='Benchmark'}
+{#if page==='Prompt lab' && turns.length}
+<button disabled={!!busy} onclick={()=>{turns=[];inspected=null;prompt='';excerpt='';fileName=''}}>New chat</button>
+{#each turns as turn,index}
+<section class="thread"><h2>{turn.prompt}</h2><div class="cards">{#each turn.answers as row}
+<article class="panel"><small>{name(row.requested_model)}</small><pre>{row.output??row.error}</pre>
+{#if row.judge}<strong>{row.judge.score.toFixed(1)} / 10</strong><p>{row.judge.reason}</p>{/if}</article>
+{/each}</div><button onclick={()=>inspected=index}>View metrics</button></section>
+{/each}
+{/if}
+{#if page==='Prompt lab' && metrics}<aside class="metrics panel" aria-label="Performance metrics"><button onclick={()=>inspected=null}>Close metrics</button><h2>Answer quality</h2>
+{#each metrics.answers as row}<section><h3>{name(row.requested_model)}</h3><small>Response time · {timing(row.latency_ms)}</small>
+{#if row.judge}<p><strong>{row.judge.score.toFixed(1)} / 10</strong></p><meter min="0" max="10" value={row.judge.score} aria-label={name(row.requested_model)+' quality'}></meter><p>{row.judge.reason}</p>
+{:else}<p>{row.judge_error??row.error??'Awaiting grading'}</p>{/if}</section>{/each}
+{#if metrics.run_id && metrics.answers.some((r:any)=>!r.judge&&r.output)}<button disabled={!!busy} onclick={()=>action('Retrying grades',async()=>{const index=inspected!;const updated=await api('history/'+turns[index].run_id+'/grade',post({}));turns[index]=updated;report=updated})}>Retry grading</button>{/if}</aside>{/if}
 <div class="layout"><section class="panel"><fieldset disabled={!!busy}>
 {#if page==='Prompt lab'}
-<h2>Prompt</h2><label for="question">What should the models solve?</label><textarea id="question" bind:value={prompt} maxlength="8000" rows="6" placeholder="Ask a question, describe a problem, or provide instructions…"></textarea>
+<h2>{turns.length?"Follow-up":"Prompt"}</h2><label for="question">What should the models solve?</label><textarea id="question" bind:value={prompt} maxlength="8000" rows="6" placeholder="Ask a question, describe a problem, or provide instructions…"></textarea>
 <label class="upload">Attach a file <input type="file" onchange={attach} accept=".txt,.md,.csv,.tsv,.json,.jsonl,.log,.py,.sql,.yaml,.yml,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"></label>
 {#if fileName}<label for="excerpt">{fileName} · excerpt shared with each model</label><textarea id="excerpt" bind:value={excerpt}></textarea><button onclick={()=>{fileName='';excerpt=''}}>Remove attachment</button>{/if}
 <p class="muted">Flow-Judge + gpt-oss-20b automatically scores each answer out of 10 and explains its rating.</p>
@@ -75,7 +92,7 @@
 <div class="toolbar"><span>{new Date(report.started_at).toLocaleString()}</span><button disabled={!!busy||!report.run_id} onclick={download}>Export JSON ↓</button></div>
 {#if report.answers}
 <h2>Answer quality</h2><div class="cards">{#each report.answers as row,i}<article class="panel"><small class="modeltitle"><span class={'dot d'+i}></span>{name(row.requested_model)}</small>
-{#if row.judge}<h3>{row.judge.score.toFixed(1)}<em> / 10</em></h3><meter min="0" max="10" value={row.judge.score} aria-label={name(row.requested_model)+' quality'}></meter><p>{row.judge.scope}</p><details><summary>Grading details</summary><p>{row.judge.model}</p>{#if row.judge.ollama_duration_ns!=null}<p>Judge call · {(row.judge.ollama_duration_ns/1e9).toFixed(2)} s{#if row.judge.ollama_load_ns!=null} · model load {(row.judge.ollama_load_ns/1e9).toFixed(2)} s{/if}</p>{/if}{#if row.judge.reason}<p>{row.judge.reason}</p>{/if}{#if row.judge.transcript}{#each row.judge.transcript as round}<details><summary>Review round {round.round}</summary>{#each round.reviews as review}<p><strong>{review.model} · {review.score}/5</strong><br>{review.reason}</p>{/each}</details>{/each}{/if}{#each Object.entries(row.judge.criteria) as [criterion,item]}<p><strong>{criterion} · {(item as any).rating}/5</strong><br>{(item as any).reason}</p>{/each}</details>
+{#if row.judge}<h3>{row.judge.score.toFixed(1)}<em> / 10</em></h3><meter min="0" max="10" value={row.judge.score} aria-label={name(row.requested_model)+' quality'}></meter><p>{row.judge.reason??row.judge.scope}</p><details><summary>Grading details</summary><p>{row.judge.model}</p>{#if row.judge.ollama_duration_ns!=null}<p>Judge call · {(row.judge.ollama_duration_ns/1e9).toFixed(2)} s{#if row.judge.ollama_load_ns!=null} · model load {(row.judge.ollama_load_ns/1e9).toFixed(2)} s{/if}</p>{/if}{#if row.judge.reason}<p>{row.judge.reason}</p>{/if}{#if row.judge.transcript}{#each row.judge.transcript as round}<details><summary>Review round {round.round}</summary>{#each round.reviews as review}<p><strong>{review.model} · {review.score}/5</strong><br>{review.reason}</p>{/each}</details>{/each}{/if}{#each Object.entries(row.judge.criteria) as [criterion,item]}<p><strong>{criterion} · {(item as any).rating}/5</strong><br>{(item as any).reason}</p>{/each}</details>
 {:else}<p>{row.judge_error??(row.status==='Error'?row.error:'Awaiting grading')}</p>{/if}</article>{/each}</div>
 {#if report.run_id && report.answers.some((r:any)=>!r.judge&&r.output)}<button disabled={!!busy} onclick={()=>action('Grading saved responses',async()=>{report=await api('history/'+report.run_id+'/grade',post({}))})}>Grade saved answers</button>{/if}
 <h2>Response time</h2><div class="panel">{#each report.answers.filter((r:any)=>r.latency_ms!=null) as r}<div class="barrow"><span>{name(r.requested_model)}</span><progress max={Math.max(1,...report.answers.map((a:any)=>a.latency_ms??0))} value={r.latency_ms}></progress><span>{timing(r.latency_ms)}</span></div>{/each}</div>

@@ -60,6 +60,7 @@ class Settings(BaseModel):
         return self
 
 class Question(Settings):
+    parent_id: UUID | None = None
     prompt: str = Field(min_length=1,max_length=8000)
 
 class Benchmark(Settings):
@@ -78,7 +79,18 @@ def models():
 @router.post("/prompt")
 def prompt(body: Question):
     with exclusive():
-        result=evaluate(body.prompt,body.models)
+        previous = []
+        parent = body.parent_id
+        while parent and len(previous) < 6:
+            turn = saved(parent)
+            if turn.get("evidence_type") != "custom_prompt":
+                raise HTTPException(422, "Choose a previous chat turn.")
+            previous.append(turn)
+            parent = turn.get("parent_id")
+        result = (evaluate(body.prompt, body.models, previous) if previous
+                  else evaluate(body.prompt, body.models))
+        if body.parent_id:
+            result["parent_id"] = str(body.parent_id)
         grade_remaining(result)
         save(result)
         return result

@@ -19,9 +19,11 @@ with sync_playwright() as pw:
         p.goto('http://127.0.0.1:8598/')
         p.get_by_label('What should the models solve?').fill('Explain the results.')
         p.get_by_role('button',name='Compare answers').click()
+        p.get_by_role('button',name='View metrics').click()
         p.get_by_role('heading',name='Answer quality').wait_for()
         assert p.locator('meter').count()==3
         assert p.evaluate('document.documentElement.scrollWidth <= window.innerWidth'),width
+        p.get_by_role('button',name='Close metrics').click()
         p.get_by_role('button',name='Benchmark').click()
         p.get_by_label('Evaluation set').select_option('standard')
         assert p.get_by_label('Task category').count()==1
