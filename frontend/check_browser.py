@@ -9,11 +9,15 @@ with sync_playwright() as pw:
         errors=[]
         p.on('pageerror',lambda e:errors.append(str(e)))
         p.route('**/studio/models',lambda r:r.fulfill(json=models))
+        saved={}
+        p.route('**/studio/history/test*',lambda r:r.fulfill(json=saved[r.request.url.split('/')[-1]]))
+        p.route('**/studio/history/*/summary',lambda r:r.fulfill(json={'model':'gpt-oss:20b','text':'Gemma earned the higher grade.'}))
         def comparison(route):
             answers=[dict(requested_model=m['id'],status='Answered',output='Response',latency_ms=200,
                           judge=dict(score=0 if m==models[0] else 10,reason='Test judge comment.',scope='Quality',criteria={})) for m in models]
             report=dict(prompt=route.request.post_data_json['prompt'],started_at='2026-11-08T00:00:00Z',
-                        run_id='test',answers=answers)
+                        run_id='test2' if saved else 'test',parent_id=route.request.post_data_json.get('parent_id'),answers=answers)
+            saved[report['run_id']]=report
             events=[dict(event='answer',row=row) for row in answers]+[dict(event='complete',report=report)]
             route.fulfill(content_type='application/x-ndjson',body=''.join(json.dumps(e)+'\n' for e in events))
         p.route('**/studio/live/prompt',comparison)
@@ -39,6 +43,12 @@ with sync_playwright() as pw:
         p.locator('.chat-turn').nth(1).wait_for()
         p.get_by_role('button',name='New chat').click()
         assert p.locator('.answer-metrics').count()==0
+        if width<=720:
+            p.get_by_role('button',name='Chat history',exact=True).click()
+        p.get_by_role('button',name='Explain the results.',exact=True).click()
+        p.locator('.chat-turn').nth(1).wait_for()
+        p.get_by_role('button',name='Results',exact=True).click()
+        p.get_by_text('Gemma earned the higher grade.').wait_for()
         p.get_by_role('button',name='Benchmark').click()
         p.get_by_label('Evaluation set').select_option('standard')
         assert p.get_by_label('Task category').count()==1

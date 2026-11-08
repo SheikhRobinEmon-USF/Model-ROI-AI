@@ -32,7 +32,10 @@ def _summary(path, inode, modified, size):
     # Atomic replacement changes the file identity when a saved run is regraded.
     UUID(path.stem)
     data = json.loads(path.read_text())
-    return {key: data[key] for key in ("run_id", "started_at", "model_id")}
+    summary = {key: data[key] for key in ("run_id", "started_at", "model_id")}
+    if data.get("evidence_type") == "custom_prompt":
+        summary.update(title=" ".join(data["prompt"].split())[:75], parent_id=data.get("parent_id"))
+    return summary
 
 
 def list_runs():

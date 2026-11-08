@@ -3,6 +3,29 @@
  type Model={id:string,name:string,installed:boolean}
  const pages=['Prompt lab','Benchmark','Results','History']
  let page=$state('Prompt lab'), models=$state<Model[]>([]), selected=$state<string[]>([]), prompt=$state(''), suite=$state('analytical'), category=$state('all'), count=$state(6), busy=$state(''), error=$state(''), report=$state<any>(null), history=$state<any[]>([]), excerpt=$state(''), fileName=$state(''), caseIndex=$state(0)
+ let chatMenu=$state(false), summaryError=$state(''), summarizing=$state('')
+ let chats=$derived.by(()=>{
+   const records=history.filter(h=>h.title), byId=new Map(records.map(h=>[h.run_id,h]))
+   const parents=new Set(records.map(h=>h.parent_id))
+   return records.filter(h=>!parents.has(h.run_id)).map(h=>{
+     let root=h
+     const seen=new Set()
+     while(byId.has(root.parent_id)&&!seen.has(root.run_id)){seen.add(root.run_id);root=byId.get(root.parent_id)}
+     return {...h,title:root.title}
+   })
+ })
+ async function readSummary(target:any){
+   const id=target.run_id
+   summarizing=id;summaryError=''
+   try{const value=await api('history/'+id+'/summary',post({}));if(report?.run_id===id)report={...report,comparison_summary:value}}
+   catch(e){if(report?.run_id===id)summaryError=e instanceof Error?e.message:String(e)}
+   finally{if(summarizing===id)summarizing=''}
+ }
+ let requested=''
+ $effect(()=>{const id=report?.run_id
+   if(page!=='Results'||!id){requested='';return}
+   if(!report.comparison_summary && requested!==id){requested=id;void readSummary(report)}
+ })
  let turns=$state<any[]>([])
  const name=(id:string)=>models.find(m=>m.id===id)?.name??id
  const timing=(n:number)=>Number.isFinite(n)?(n/1000).toFixed(2)+' s':'Unavailable'
@@ -13,7 +36,7 @@
  let feed=$state<HTMLElement>(), editor=$state<HTMLTextAreaElement>(), copied=$state<number|null>(null)
  async function bottom(){await tick();if(feed)feed.scrollTop=feed.scrollHeight}
  function remember(id?:string){try{if(id)localStorage.setItem('modelroi-chat',id);else localStorage.removeItem('modelroi-chat')}catch{}}
- function newChat(){page='Prompt lab';turns=[];copied=null;prompt='';fileName='';excerpt='';error='';remember();tick().then(()=>editor?.focus())}
+ function newChat(){chatMenu=false;report=null;page='Prompt lab';turns=[];copied=null;prompt='';fileName='';excerpt='';error='';remember();tick().then(()=>editor?.focus())}
  async function resume(last:any){
    const chain=[last], seen=new Set([last.run_id])
    while(chain[0].parent_id && !seen.has(chain[0].parent_id)){
@@ -23,7 +46,7 @@
    newChat();turns=chain;report=last;remember(last.run_id);await bottom()
  }
  async function copyPrompt(text:string,index:number){try{await navigator.clipboard.writeText(text);copied=index}catch{error='Clipboard unavailable. Select the prompt text to copy it.'}}
- onMount(async()=>{await refresh();const id=localStorage.getItem('modelroi-chat');if(id)await action('Restoring chat',async()=>resume(await api('history/'+id)))})
+ onMount(async()=>{await refresh();await action('Loading chat history',async()=>{history=await api('history')});const id=localStorage.getItem('modelroi-chat');if(id)await action('Restoring chat',async()=>resume(await api('history/'+id)))})
  async function nav(p:string){if(busy)return;page=p;error='';if(p==='History')await action('Opening run history',async()=>{history=await api('history')})}
  async function attach(e:Event){const f=(e.currentTarget as HTMLInputElement).files?.[0];if(!f)return;fileName='';excerpt='';await action('Reading document',async()=>{const data=await api('extract?name='+encodeURIComponent(f.name),{method:'POST',body:f});excerpt=data.excerpt.slice(0,2200);fileName=f.name})}
  async function execute(){await action(page==='Prompt lab'?'Generating responses and evaluating selected models':'Running matched cases',async()=>{
@@ -55,7 +78,7 @@
        report={...partial,answers:[...partial.answers].sort((a,b)=>selected.indexOf(a.requested_model)-selected.indexOf(b.requested_model))}
        if(isPrompt)turns=[...turns.slice(0,turnIndex),report]
      }
-     if(event.event==='complete'){report=event.report;if(isPrompt){turns=[...turns.slice(0,turnIndex),report];remember(report.run_id);prompt='';fileName='';excerpt='';await bottom()}else page='Results';caseIndex=0;complete=true}
+     if(event.event==='complete'){report=event.report;if(isPrompt){turns=[...turns.slice(0,turnIndex),report];remember(report.run_id);history=[{run_id:report.run_id,parent_id:payload.parent_id,title:input.slice(0,75),model_id:report.model_id,started_at:report.started_at},...history.filter(h=>h.run_id!==report.run_id)];prompt='';fileName='';excerpt='';await bottom()}else page='Results';caseIndex=0;complete=true}
    }
  }
  if(!complete)throw Error('Connection ended early. Check History for the completed run.')
@@ -80,6 +103,9 @@
 {#if busy}<p class="progress" role="status">{busy}…</p>{/if}
 {#if page==='Prompt lab'||page==='Benchmark'}
 {#if page==='Prompt lab'}
+<div class="chat-workspace"><button class="mobile-chats" aria-expanded={chatMenu} onclick={()=>chatMenu=!chatMenu}>Chat history</button>
+<aside class="chat-history" class:expanded={chatMenu} aria-label="Chat history"><h2>Chats</h2>
+{#each chats as chat}<button disabled={!!busy} aria-current={turns.at(-1)?.run_id===chat.run_id?'true':undefined} onclick={()=>action('Opening chat',async()=>resume(await api('history/'+chat.run_id)))}>{chat.title}</button>{:else}<small>Your conversations will appear here.</small>{/each}</aside>
 <section class="chat-space">
 <div class="chat-tools"><details><summary>Models · {selected.length}</summary><div class="model-menu panel">{#each models as m}<label><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed}> {m.name}</label>{/each}<button disabled={!!busy} onclick={refresh}>Refresh model status</button></div></details>
 <button disabled={!!busy} onclick={newChat}>＋ New chat</button></div>
@@ -97,7 +123,7 @@
 <div class="composer"><textarea id="question" aria-label="What should the models solve?" bind:this={editor} bind:value={prompt} maxlength="8000" rows="2" placeholder={turns.length?'Ask a follow-up…':'Message the models…'} disabled={!!busy} onkeydown={(e)=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();if(prompt.trim()&&selected.length&&!busy)execute()}}}></textarea>
 {#if fileName}<details><summary>{fileName}</summary><textarea aria-label="File excerpt" bind:value={excerpt}></textarea><button onclick={()=>{fileName='';excerpt=''}}>Remove attachment</button></details>{/if}
 <div class="composer-actions"><label class="attach-chat">＋ Attach<input disabled={!!busy} type="file" onchange={attach}></label><button class="send" disabled={!!busy||!selected.length||!prompt.trim()} onclick={execute}>Send ↑</button></div></div>
-</section>{/if}
+</section></div>{/if}
 {#if page==='Benchmark'}<div class="layout"><section class="panel"><fieldset disabled={!!busy}>
 <h2>Workload</h2><label for="suite">Evaluation set</label><select id="suite" bind:value={suite} onchange={()=>{count=5;category="all"}}><option value="analytical">Analytical challenges</option><option value="standard">Built-in graded cases</option></select><label for="category">Task category</label><select id="category" bind:value={category}><option value="all">All categories</option>{#each (suite==="analytical"?["math","coding","case_study"]:["structured_extraction","hospital_finance_qa","instruction_following_classification"]) as c}<option value={c}>{c.replaceAll("_"," ")}</option>{/each}</select><label for="cases">Cases per model</label><input id="cases" type="number" min="1" max={suite==='standard'?50:6} bind:value={count}><p class="muted">Each model receives identical cases. Outputs are checked against the same expected answers.</p>
 </fieldset></section><aside class="panel"><h2>Models</h2><p class="muted">Select local models for this run.</p>
@@ -108,6 +134,8 @@
 {#each history as h}<button class="history" disabled={!!busy} onclick={()=>action('Opening run',async()=>{report=await api('history/'+h.run_id);caseIndex=0;page='Results'})}><strong>{h.model_id}</strong><span>{new Date(h.started_at).toLocaleString()} →</span></button>{:else}<p class="panel">Your saved comparisons will appear here after your first run.</p>{/each}
 {:else if !report}<p class="panel">Run a comparison or open a saved result from History.</p>
 {:else}
+<section class="panel" aria-label="Comparison summary"><h2>Comparison summary</h2><small>OpenAI · gpt-oss-20b</small>
+{#if report.comparison_summary}<p>{report.comparison_summary.text}</p>{:else if summarizing===report.run_id}<p role="status">Writing the comparison…</p>{:else if summaryError}<p>{summaryError}</p><button onclick={()=>readSummary(report)}>Retry summary</button>{/if}</section>
 <div class="toolbar"><span>{new Date(report.started_at).toLocaleString()}</span><button disabled={!!busy||!report.run_id} onclick={download}>Export JSON ↓</button></div>
 {#if report.answers}
 <button disabled={!!busy} onclick={()=>action("Opening chat",()=>resume(report))}>Continue chat</button><h2>Answer quality</h2><div class="cards">{#each report.answers as row,i}<article class="panel"><small class="modeltitle"><span class={'dot d'+i}></span>{name(row.requested_model)}</small>

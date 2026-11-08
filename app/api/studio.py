@@ -16,7 +16,7 @@ from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
-from app.graders.quality import rating
+from app.graders.quality import rating, comparison_summary
 from app.datasets.analytical import analytical_cases
 from app.datasets.attachments import extract
 from app.datasets.validate import validate_jsonl
@@ -164,6 +164,19 @@ def saved(run_id: UUID):
     except FileNotFoundError:
         raise HTTPException(404,"Run no longer available.")
 
+@router.post("/history/{run_id}/summary")
+def summarize(run_id: UUID):
+    with exclusive():
+        report = saved(run_id)
+        if "comparison_summary" not in report:
+            try:
+                report["comparison_summary"] = comparison_summary(report)
+            except (OSError, ValueError) as exc:
+                raise HTTPException(503, f"Could not summarize this run: {exc}") from exc
+            save(report)
+        return report["comparison_summary"]
+
+
 @router.post("/history/{run_id}/grade")
 def regrade(run_id: UUID):
     with exclusive():
@@ -171,6 +184,7 @@ def regrade(run_id: UUID):
         if result.get("evidence_type")!="custom_prompt":
             raise HTTPException(422,"Only prompt runs support rubric grading.")
         grade_remaining(result)
+        result.pop("comparison_summary", None)
         save(result)
         return result
 
