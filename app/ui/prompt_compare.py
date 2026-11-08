@@ -28,7 +28,37 @@ def evaluate(prompt, models):
             "evidence_type": "custom_prompt", "prompt": prompt, "answers": rows}
 
 
-def display(report):
+def grade_remaining(report, reference):
+    report["judge_reference"] = reference
+    for row in report["answers"]:
+        if row["status"] != "Answered" or "judge" in row:
+            continue
+        try:
+            row["judge"] = rating(report["prompt"], row["output"], reference)
+            row.pop("judge_error", None)
+        except (ValueError, OSError, KeyError) as exc:
+            row["judge_error"] = f"Flow-Judge could not score this answer ({exc})."
+
+
+def display(report, allow_grading=False):
+    st.subheader("Answer quality · Flow-Judge")
+    pending = any(row["status"] == "Answered" and "judge" not in row for row in report["answers"])
+    if allow_grading and pending and st.button("Grade saved answers", key="grade_"+report["run_id"]):
+        with st.spinner("Grading the existing responses…"):
+            grade_remaining(report, report.get("judge_reference", ""))
+            save(report)
+    for row in report["answers"]:
+        name = MODELS[row["requested_model"]]
+        verdict = row.get("judge")
+        if verdict:
+            st.progress(verdict["score"]/10, text=f"{name} · {verdict['score']:.1f}/10 · {verdict['scope']}")
+            with st.expander(f"{name} grading details"):
+                for label, item in verdict["criteria"].items():
+                    st.write(f"{label} ({item['rating']}/5) · {item['reason']}")
+        elif row["status"] != "Answered":
+            st.caption(f"{name} · Unscored ({row['status'].lower()} answer)")
+        else:
+            st.caption(f"{name} · "+row.get("judge_error", "Awaiting grading"))
     st.subheader("Answers to your question")
     st.write(report["prompt"])
     timings = []
@@ -40,14 +70,6 @@ def display(report):
             continue
         seconds = row["latency_ms"] / 1000
         column.caption(f"{row['status']} · {seconds:.2f} s")
-        if "judge" in row:
-            verdict = row["judge"]
-            column.progress(verdict["score"]/10, text=f"{verdict['scope']} · {verdict['score']:.1f}/10")
-            with column.expander("Flow-Judge feedback"):
-                for label, item in verdict["criteria"].items():
-                    st.write(f"{label} ({item['rating']}/5) · {item['reason']}")
-        elif "judge_error" in row:
-            column.warning(row["judge_error"])
         column.text(row["output"])
         timings.append({"Model": name, "Seconds": seconds})
     if timings:
@@ -105,18 +127,10 @@ def panel(enabled):
         with st.spinner("Running the same question through each selected model…"):
             report = evaluate(prompt, models)
             if use_judge:
-                report["judge_reference"] = reference
-                for row in report["answers"]:
-                    if row["status"] != "Answered":
-                        row["judge_error"] = "A complete answer is required for grading."
-                        continue
-                    try:
-                        row["judge"] = rating(prompt,row["output"],reference)
-                    except (ValueError,OSError,KeyError) as exc:
-                        row["judge_error"] = f"Rating unavailable · {exc}. Check ollama show {JUDGE}"
+                grade_remaining(report, reference)
             save(report)
             st.session_state.result = report
     report = st.session_state.get("result", {})
     if (report.get("evidence_type") == "custom_prompt" and report["prompt"] == prompt
             and [row["requested_model"] for row in report["answers"]] == models):
-        display(report)
+        display(report, allow_grading=enabled)

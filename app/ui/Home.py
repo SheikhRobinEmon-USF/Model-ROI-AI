@@ -113,7 +113,7 @@ else:
     if not result:
         st.info('Run a mock demo or local benchmark first.')
     elif result.get('evidence_type')=='custom_prompt':
-        prompt_compare.display(result)
+        prompt_compare.display(result, allow_grading=local_enabled)
     elif result.get('evidence_type')=='matched_local_comparison':
         show(result)
     else:
