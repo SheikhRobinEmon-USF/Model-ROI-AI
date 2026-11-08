@@ -22,7 +22,7 @@ from app.datasets.attachments import extract
 from app.datasets.validate import validate_jsonl
 from app.execution.local_run import run
 from app.providers.local import installed_match, request
-from app.storage.history import load, list_runs, save
+from app.storage.history import delete_chat, load, list_runs, save
 from app.ui.comparison import MODELS, compare, mix_workloads
 from app.ui.prompt_compare import evaluate, grade_remaining
 
@@ -152,6 +152,33 @@ async def attachment(req: Request, name: str):
         return {"excerpt":await run_in_threadpool(extract, name, bytes(data))}
     except Exception as exc:
         raise HTTPException(422,f"Cannot read file: {exc}") from exc
+
+class ChatEdit(BaseModel):
+    action: Literal["rename", "pin", "unpin", "delete"]
+    title: str = Field(default="", max_length=100)
+
+
+@router.post("/chats/{run_id}")
+def edit_chat(run_id: UUID, body: ChatEdit):
+    with exclusive():
+        report = saved(run_id)
+        if report.get("evidence_type") != "custom_prompt":
+            raise HTTPException(422, "Choose a chat.")
+        records = list_runs()
+        if any(row.get("parent_id") == str(run_id) for row in records):
+            raise HTTPException(409, "This chat has newer turns. Refresh and select its latest turn.")
+        if body.action == "delete":
+            return {"removed": delete_chat(str(run_id), records)}
+        if body.action == "rename":
+            title = body.title.strip()
+            if not title:
+                raise HTTPException(422, "Enter a chat name.")
+            report["chat_name"] = title
+        else:
+            report["pinned"] = body.action == "pin"
+        save(report)
+        return {"removed": []}
+
 
 @router.get("/history")
 def history():

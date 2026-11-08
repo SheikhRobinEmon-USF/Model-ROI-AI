@@ -4,16 +4,25 @@
  const pages=['Prompt lab','Benchmark','Results','History']
  let page=$state('Prompt lab'), models=$state<Model[]>([]), selected=$state<string[]>([]), prompt=$state(''), suite=$state('analytical'), category=$state('all'), count=$state(6), busy=$state(''), error=$state(''), report=$state<any>(null), history=$state<any[]>([]), excerpt=$state(''), fileName=$state(''), caseIndex=$state(0)
  let chatMenu=$state(false), summaryError=$state(''), summarizing=$state('')
+ let menu=$state(''), editMode=$state(''), newTitle=$state('')
  let chats=$derived.by(()=>{
    const records=history.filter(h=>h.title), byId=new Map(records.map(h=>[h.run_id,h]))
    const parents=new Set(records.map(h=>h.parent_id))
    return records.filter(h=>!parents.has(h.run_id)).map(h=>{
-     let root=h
+     let root=h, pinned=h.pinned, title=h.chat_name
      const seen=new Set()
-     while(byId.has(root.parent_id)&&!seen.has(root.run_id)){seen.add(root.run_id);root=byId.get(root.parent_id)}
-     return {...h,title:root.title}
-   })
+     while(byId.has(root.parent_id)&&!seen.has(root.run_id)){seen.add(root.run_id);root=byId.get(root.parent_id);pinned??=root.pinned;title??=root.chat_name}
+     return {...h,title:title??root.title,pinned:pinned??false}
+   }).sort((a,b)=>Number(b.pinned)-Number(a.pinned))
  })
+ async function manage(chat:any,operation:string){
+   await action('Updating chat',async()=>{
+     const result=await api('chats/'+chat.run_id,post({action:operation,title:operation==='rename'?newTitle.trim():''}))
+     if(result.removed.includes(turns.at(-1)?.run_id))newChat()
+     if(result.removed.includes(report?.run_id))report=null
+     history=await api('history');menu='';editMode=''
+   })
+ }
  async function readSummary(target:any){
    const id=target.run_id
    summarizing=id;summaryError=''
@@ -36,7 +45,7 @@
  let feed=$state<HTMLElement>(), editor=$state<HTMLTextAreaElement>(), copied=$state<number|null>(null)
  async function bottom(){await tick();if(feed)feed.scrollTop=feed.scrollHeight}
  function remember(id?:string){try{if(id)localStorage.setItem('modelroi-chat',id);else localStorage.removeItem('modelroi-chat')}catch{}}
- function newChat(){chatMenu=false;report=null;page='Prompt lab';turns=[];copied=null;prompt='';fileName='';excerpt='';error='';remember();tick().then(()=>editor?.focus())}
+ function newChat(){menu='';editMode='';chatMenu=false;report=null;page='Prompt lab';turns=[];copied=null;prompt='';fileName='';excerpt='';error='';remember();tick().then(()=>editor?.focus())}
  async function resume(last:any){
    const chain=[last], seen=new Set([last.run_id])
    while(chain[0].parent_id && !seen.has(chain[0].parent_id)){
@@ -105,7 +114,14 @@
 {#if page==='Prompt lab'}
 <div class="chat-workspace"><button class="mobile-chats" aria-expanded={chatMenu} onclick={()=>chatMenu=!chatMenu}>Chat history</button>
 <aside class="chat-history" class:expanded={chatMenu} aria-label="Chat history"><h2>Chats</h2>
-{#each chats as chat}<button disabled={!!busy} aria-current={turns.at(-1)?.run_id===chat.run_id?'true':undefined} onclick={()=>action('Opening chat',async()=>resume(await api('history/'+chat.run_id)))}>{chat.title}</button>{:else}<small>Your conversations will appear here.</small>{/each}</aside>
+{#each chats as chat (chat.run_id)}<div class="chat-entry">
+<button disabled={!!busy} title={chat.title} aria-current={turns.at(-1)?.run_id===chat.run_id?'true':undefined} onclick={()=>action('Opening chat',async()=>resume(await api('history/'+chat.run_id)))}>{chat.pinned?'📌 ':''}{chat.title}</button>
+<button class="more" disabled={!!busy} aria-label={'Actions for '+chat.title} aria-expanded={menu===chat.run_id} onclick={()=>{menu=menu===chat.run_id?'':chat.run_id;editMode=''}}>⋯</button>
+{#if menu===chat.run_id}<div class="chat-options">
+{#if editMode==='rename'}<form onsubmit={(e)=>{e.preventDefault();manage(chat,'rename')}}><input aria-label="Chat name" bind:value={newTitle} maxlength="100"><button disabled={!!busy||!newTitle.trim()}>Save name</button></form>
+{:else if editMode==='delete'}<small>Delete this conversation and its saved results?</small><button disabled={!!busy} onclick={()=>manage(chat,'delete')}>Confirm deletion</button>
+{:else}<button onclick={()=>{editMode='rename';newTitle=chat.title}}>Rename</button><button onclick={()=>manage(chat,chat.pinned?'unpin':'pin')}>{chat.pinned?'Unpin':'Pin'}</button><button onclick={()=>editMode='delete'}>Delete</button>{/if}
+<button onclick={()=>{menu='';editMode=''}}>Cancel</button></div>{/if}</div>{:else}<small>Your conversations will appear here.</small>{/each}</aside>
 <section class="chat-space">
 <div class="chat-tools"><details><summary>Models · {selected.length}</summary><div class="model-menu panel">{#each models as m}<label><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed}> {m.name}</label>{/each}<button disabled={!!busy} onclick={refresh}>Refresh model status</button></div></details>
 <button disabled={!!busy} onclick={newChat}>＋ New chat</button></div>

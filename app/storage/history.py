@@ -34,7 +34,8 @@ def _summary(path, inode, modified, size):
     data = json.loads(path.read_text())
     summary = {key: data[key] for key in ("run_id", "started_at", "model_id")}
     if data.get("evidence_type") == "custom_prompt":
-        summary.update(title=" ".join(data["prompt"].split())[:75], parent_id=data.get("parent_id"))
+        summary.update(title=" ".join(data["prompt"].split())[:75], parent_id=data.get("parent_id"),
+                       chat_name=data.get("chat_name"), pinned=data.get("pinned"))
     return summary
 
 
@@ -47,3 +48,21 @@ def list_runs():
         except (ValueError,KeyError,OSError):
             continue
     return sorted(records,key=lambda r:r['started_at'],reverse=True)
+
+
+def delete_chat(leaf, records):
+    """Remove the leaf and its ancestors up to the first shared turn."""
+    chats = {row["run_id"]: row for row in records if "title" in row}
+    children = {}
+    for row in chats.values():
+        children.setdefault(row["parent_id"], set()).add(row["run_id"])
+    removed = []
+    while leaf in chats and not children.get(leaf):
+        parent = chats[leaf]["parent_id"]
+        removed.append(leaf)
+        children[parent].discard(leaf)
+        leaf = parent
+    # Ancestors first so an interrupted deletion can still be retried by leaf ID.
+    for run_id in reversed(removed):
+        (directory() / f"{UUID(run_id)}.json").unlink(missing_ok=True)
+    return removed
