@@ -71,3 +71,13 @@ Choose **Hosted** in Prompt lab or Benchmark to evaluate up to five API responde
 ## Test your own model
 
 In Prompt lab or Benchmark, choose **Deploy model**, select an installed Ollama base, name the new responder and give it system instructions. It becomes a separate candidate in the model picker. Local and hosted comparisons support up to five responders, including user models. To evaluate your own trained weights, see [Import your own model](SETUP.md#import-your-own-model).
+
+## Evaluation methodology
+
+Prompt and benchmark grades use correctness, relevance, completeness, instruction following and faithfulness (support from provided evidence). The overall v2 grade is the arithmetic mean of the applicable dimensions. Missing source evidence can yield N/A for faithfulness. Results retain the judge identity, rubric version, scores and overall comment. Historical holistic grades keep their original meaning.
+
+Benchmarks separately check exact expected values and JSON key/type structure. Extraction field micro-F1 pools correctly extracted key/value pairs over predicted and expected fields. Request error rate counts failed executions; valid but wrong answers can fail the task even when the request succeeded. p95 uses the nearest-rank elapsed attempt latency, including failed attempts. Ollama decode throughput uses its token generation duration. Input/output token counts depend on provider telemetry.
+
+Before a matched benchmark, open **Ranking thresholds**. Defaults are 80% task success and 95% schema compliance; the optional p95 limit is in seconds. Eligible models receive a weighted score for this run: task success (50), relative p95 speed (20), relative provider fees per success (20), and request reliability (10). Latency and cost use inverse min-max scaling among eligible models; equal values tie. Missing cost removes its weight across the comparison. Local provider fees exclude hardware and electricity. These are exploratory relative scores on draft cases. Human-reviewed references, repeated trials and independent validation are still needed for release decisions.
+
+Time-to-first-token requires token streaming, repeated-run consistency needs repeated trials, and safety or tool-use pass rates need labeled tasks and instrumentation. The dashboard does not estimate those quantities from a single answer. Source-grounding grades are judge assessments, not measured hallucination rates.

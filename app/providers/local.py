@@ -51,6 +51,8 @@ def generate(model, prompt, history=(), *, keep_alive=0):
         raise ValueError('Incomplete local generation')
     return {'evidence_type':'local_inference','model_id':result.get('model',model),
         'model_digest':match.get('digest'),'output':result['message']['content'],
+        'decode_tokens_per_second': (result['eval_count'] * 1e9 / result['eval_duration']
+                                    if result.get('eval_duration', 0) > 0 and result.get('eval_count') is not None else None),
         'input_tokens':result.get('prompt_eval_count'),'output_tokens':result.get('eval_count'),
         'latency_ms':(perf_counter()-start)*1000,'provider_api_cost_usd':0,
         'total_compute_cost_usd':None,'cost_note':'Local electricity and hardware cost not measured',

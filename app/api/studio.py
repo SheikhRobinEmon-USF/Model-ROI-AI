@@ -13,6 +13,7 @@ from uuid import UUID
 from threading import Lock
 from itertools import combinations
 from app.evaluation import paired_exact
+from app.evaluation_policy import Gates, rank_runs
 from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -82,6 +83,7 @@ class Question(Settings):
     prompt: str = Field(min_length=1,max_length=8000)
 
 class Benchmark(Settings):
+    gates: Gates = Field(default_factory=Gates)
     suite: Literal["analytical","standard"]
     count: int = Field(ge=1,le=50)
     category: str = "all"
@@ -191,7 +193,7 @@ def benchmark(body: Benchmark):
                     continue
                 try:
                     emit("status", phase="grade", message=f"Grading {model_run['model_id']} · case {index} of {len(model_run['results'])}")
-                    task = row["input"]
+                    task = json.dumps({"task": row["input"], "reference_answer": row["expected"]}, ensure_ascii=False)
                     if row.get("done_reason") == "length":
                         task += "\nEvaluator note: the delivered answer was truncated."
                     row["judge"] = rate_once(grader, task, row["output"])
@@ -200,6 +202,13 @@ def benchmark(body: Benchmark):
                     row["judge_error"] = str(exc)
             model_run["judge_mean"] = sum(scores) / len(scores) if scores else None
             model_run["judge_count"] = len(scores)
+            dimension_values = {}
+            for row in model_run["results"]:
+                for key, value in ((row.get("judge") or {}).get("dimensions") or {}).items():
+                    if value is not None:
+                        dimension_values.setdefault(key, []).append(value)
+            model_run["quality_dimensions"] = {key: {"mean": sum(values)/len(values), "count": len(values)}
+                                               for key, values in dimension_values.items()}
         if "runs" in result:
             pairs=[]
             for first, second in combinations(result["runs"],2):
@@ -214,6 +223,7 @@ def benchmark(body: Benchmark):
                 adjusted=max(adjusted,min(1,(len(pairs)-i)*pair["p"]))
                 pair["holm_p"]=adjusted
             result["pairs"]=pairs
+            result["ranking"]=rank_runs(result["runs"], body.gates)
         emit("status", phase="save", message="Saving results to local history")
         save(result)
         return result

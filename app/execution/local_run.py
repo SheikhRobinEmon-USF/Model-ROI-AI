@@ -5,7 +5,7 @@ import json
 from time import perf_counter
 from uuid import uuid4
 from app.providers.local import generate
-from app.graders.exact import grade
+from app.graders.exact import grade, structure_metrics
 from app.evaluation import wilson, percentile
 
 def run(cases, model='qwen3:4b', progress=None, generate_fn=None):
@@ -27,19 +27,29 @@ def run(cases, model='qwen3:4b', progress=None, generate_fn=None):
         except Exception as exc:
             row.update(output='',passed=False,reason='inference_error',status='failed',
                        error_type=type(exc).__name__,latency_ms=(perf_counter()-start)*1000)
+        row.update(structure_metrics(case, row["output"]))
         rows.append(row)
         if progress:
             progress(i+1,len(cases))
     n=len(rows)
     successes=sum(r['passed'] for r in rows)
+    errors = sum(r["status"] == "failed" for r in rows)
+    counts = [r["field_counts"] for r in rows if "field_counts" in r]
+    field_total = sum(predicted + expected for _, predicted, expected in counts)
+    known_cost = all(r.get("provider_api_cost_usd") is not None for r in rows)
+    cost = sum(r["provider_api_cost_usd"] for r in rows) if known_cost else None
+    metrics = {"version": "benchmark-v2", "schema_rate": sum(r["schema_valid"] for r in rows) / n,
+               "error_rate": errors / n, "field_micro_f1": (2 * sum(r[0] for r in counts) / field_total
+                                                          if field_total else None),
+               "provider_cost_per_success": cost / successes if successes and known_cost else None}
     serialized=json.dumps([c.model_dump() for c in cases],sort_keys=True)
     return {'run_id':str(uuid4()),'started_at':started,'evidence_type':'local_inference',
             'model_id':model,'dataset_sha256':sha256(serialized.encode()).hexdigest(),
-            'planned_cases':len(cases),'attempted_cases':n,'successful_cases':successes,
+            'metrics':metrics,'dataset_version':cases[0].dataset_version,'planned_cases':len(cases),'attempted_cases':n,'successful_cases':successes,
             'success_rate':successes/n if n else None,'wilson_95':wilson(successes,n),
             'p50_ms':percentile([r['latency_ms'] for r in rows],.5),
             'p95_ms':percentile([r['latency_ms'] for r in rows],.95),
-            'provider_api_cost_usd':0,'total_compute_cost_usd':None,
+            'provider_api_cost_usd':cost,'total_compute_cost_usd':None,
             'recommendation_status':'PROVISIONAL_INSUFFICIENT_EVIDENCE',
             'limitations':['Draft labels require independent review.','Local compute cost is unmeasured.',
                           'Latency is hardware-specific; fewer than 100 samples is exploratory.',

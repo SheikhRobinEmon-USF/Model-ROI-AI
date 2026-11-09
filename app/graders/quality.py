@@ -17,6 +17,20 @@ SCHEMA = {"type": "object", "additionalProperties": False, "required": ["score",
     "reason": {"type": "string", "minLength": 1}}}
 
 
+DIMENSIONS = ("correctness", "relevance", "completeness", "instruction_following", "faithfulness")
+RUBRIC += (" Score each dimension from 0 to 10. Correctness measures agreement with the reference "
+           "or the best supported answer. Relevance measures whether it addresses the task. "
+           "Completeness measures coverage of requested parts. Instruction following measures "
+           "adherence to explicit constraints. Faithfulness measures support from supplied source "
+           "material or a reference answer; use null when no such evidence exists. "
+           "In reason, identify a concrete strength or error in the delivered answer.")
+SCHEMA["required"].append("dimensions")
+SCHEMA["properties"]["dimensions"] = {
+    "type": "object", "additionalProperties": False, "required": list(DIMENSIONS),
+    "properties": {d: {"enum": list(range(11)) + ([None] if d == "faithfulness" else []),
+                       "type": ["integer", "null"] if d == "faithfulness" else "integer"} for d in DIMENSIONS}}
+
+
 def judge_request(path, payload, timeout):
     if payload["model"] == hosted.JUDGE:
         choice, _ = hosted.completion(hosted.JUDGE, payload["messages"], payload["options"]["num_predict"], payload.get("format"))
@@ -47,8 +61,19 @@ def rating(question, answer, model=MODEL):
                            if isinstance(value := verdict.get(key), str) and value.strip()), None)
             if reason is None:
                 raise ValueError("The reason field needs one nonempty sentence explaining the score")
-            return {"model": model, "scope": "Answer quality", "score": score,
-                    "reason": reason.strip(), "criteria": {}, "rubric_version": "gpt-oss-v1"}
+            dimensions = verdict.get("dimensions")
+            if dimensions is not None:
+                if not isinstance(dimensions, dict) or set(dimensions) != set(DIMENSIONS):
+                    raise ValueError("Return all five rubric dimensions")
+                for key, value in dimensions.items():
+                    if key == "faithfulness" and value is None:
+                        continue
+                    if type(value) is not int or not 0 <= value <= 10:
+                        raise ValueError(f"Invalid {key} score")
+                values = [v for v in dimensions.values() if v is not None]
+                score = round(sum(values) / len(values), 1)
+            return {"dimensions": dimensions, "model": model, "scope": "Answer quality", "score": score,
+                    "reason": reason.strip(), "criteria": {}, "rubric_version": "quality-v2" if dimensions else "holistic-v1"}
         except (ValueError, KeyError, TypeError) as exc:
             if attempt:
                 raise ValueError(f"Invalid verdict after two attempts: {exc}") from exc
@@ -67,7 +92,7 @@ def comparison_summary(report):
                 "status": row["status"], "score_out_of_10": grade.get("score"),
                 "comment": grade.get("reason"), "latency_ms": row.get("latency_ms")})
     else:
-        keys = ("model_id", "successful_cases", "attempted_cases", "judge_count", "judge_mean", "p50_ms")
+        keys = ("model_id", "successful_cases", "attempted_cases", "judge_count", "judge_mean", "p50_ms", "p95_ms", "metrics")
         evidence = {"benchmark": [{k: run.get(k) for k in keys}
                                   for run in report.get("runs", [report])]}
     result = judge_request("/api/chat", {

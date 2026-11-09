@@ -11,3 +11,4 @@ body:has(.chat-space){margin:0}.shell:has(.chat-space){padding-bottom:0}.heading
 .context-option{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;color:#375646}.context-option input{width:15px;height:15px}
 .deploy-form{max-width:640px;margin:12px auto}.deploy-form input{width:100%;padding:10px;border:1px solid #b5cabe;border-radius:8px}.deploy-form button{margin-right:8px}
 @media(max-width:720px){.chat-tools{position:relative}.chat-tools>details{position:static}.chat-tools .model-menu{inset-inline:0;width:100%;top:100%}}
+.rubric{margin:8px 0}.rubric div{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #d6e2db;padding:5px 0}.rubric div span{text-transform:capitalize}
