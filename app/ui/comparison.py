@@ -8,6 +8,7 @@ from uuid import uuid4
 from app.evaluation import paired_exact, percentile
 from app.execution.local_run import run
 from app.providers.hosted import ROUTES
+from app.providers.custom import PREFIX, tag_for
 
 MODELS = {"qwen3:4b": "Qwen3 4B", "gemma4:e4b": "Gemma 4 E4B"}
 ALL_MODELS = {**MODELS, **{model: route.label for model, route in ROUTES.items()}}
@@ -26,14 +27,14 @@ def compare(cases, models, progress=None, generate_fn=None):
         raise ValueError("Select two different models and at least one case.")
     runs = []
     for index, model in enumerate(models):
-        if model not in ALL_MODELS:
+        if model not in ALL_MODELS and not model.startswith(PREFIX):
             raise ValueError("Unsupported model")
         def update(done, total):
             if progress:
-                progress((index * total + done) / (len(models) * total), ALL_MODELS[model])
+                progress((index * total + done) / (len(models) * total), ALL_MODELS.get(model, tag_for(model)))
         runs.append(run(cases, model=model, progress=update, generate_fn=generate_fn))
     return {"run_id": str(uuid4()), "started_at": runs[0]["started_at"],
-            "model_id": " / ".join(ALL_MODELS[m] for m in models),
+            "model_id": " / ".join(ALL_MODELS.get(m, tag_for(m)) for m in models),
             "evidence_type": "matched_local_comparison", "runs": runs}
 
 

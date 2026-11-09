@@ -198,3 +198,17 @@ The Groq key also enables the independent judge and Results summary (`openai/gpt
 Providers receive the current prompt, shared excerpts and their own prior conversation. Grading sends the answer, task, relevant context and optional reference to Groq. The summary sends labeled report evidence to Groq. The longer history option considers up to 32 turns and 24,000 characters per responder, subject to service quotas. By default history uses the common local comparison budget. A candidate newly added mid-chat has no earlier answers of its own.
 
 Start with one prompt before a benchmark. Dispatch is sequential and answers appear individually. End-to-end timings include network and provider processing. A short provider-supplied Retry-After on HTTP 429 is retried once. Regrade saved prompt answers if the judge quota expires. Quotas, availability and aliases can change; Mistral's latest alias can change its underlying revision.
+
+### Import your own model
+
+The studio discovers locally installed Ollama models. For a custom GGUF text-generation model supported by Ollama, put its GGUF file and a file named `Modelfile` in the same directory. For example:
+
+```text
+FROM ./my-model.gguf
+```
+
+From that directory, run `ollama create my-model-v1 -f Modelfile` and test it with `ollama run my-model-v1`. Open the studio, choose **Models → Refresh model status**, then select the tag alongside your comparison models. Use an inference-ready chat model sized for your computer. [Ollama model import guide](https://docs.ollama.com/import)
+
+Alternatively, **Deploy model** creates a new Ollama tag from installed weights and custom system instructions. This configures model behavior without training new weights. An existing deployment name is protected from overwrite. Use a new version name to compare revisions. The Ollama service owns the weights; your repository and SQLite store no weights or deployment credentials.
+
+In Local mode, Ollama performs generation and judging. In Hosted mode, user models still generate on your computer, while Groq receives their answers and relevant context for grading. A comparison can contain at most five candidates. A full selection requires deselecting a responder before adding another.

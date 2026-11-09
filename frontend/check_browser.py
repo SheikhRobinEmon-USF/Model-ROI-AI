@@ -69,6 +69,12 @@ with sync_playwright() as pw:
         assert p.locator('.response').count()==1
         assert p.locator('.response strong').first.inner_text()=='Cloudflare'
         assert p.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        p.get_by_role('button',name='Deploy model',exact=True).click()
+        form=p.get_by_role('region',name='Deploy a model')
+        form.get_by_label('Model name').fill('analyst-v1')
+        form.get_by_label('Model instructions').fill('Explain all assumptions.')
+        assert form.get_by_role('button',name='Deploy to Ollama').is_enabled()
+        form.get_by_role('button',name='Cancel').click()
         assert not errors,errors
         print('Browser verified at',width)
         p.close()

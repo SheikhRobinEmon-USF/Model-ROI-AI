@@ -17,7 +17,7 @@ from app.ui.comparison import MODELS, ALL_MODELS
 def evaluate(prompt, models, previous=(), *, history_chars=None):
     rows = []
     for tag in models:
-        emit("status", phase="generate", message=f"Generating answer with {ALL_MODELS[tag]}")
+        emit("status", phase="generate", message=f"Generating answer with {ALL_MODELS.get(tag, tag.removeprefix('ollama/'))}")
         row = {"requested_model": tag}
         try:
             history = []
@@ -42,7 +42,7 @@ def evaluate(prompt, models, previous=(), *, history_chars=None):
         rows.append(row)
         emit("answer", row=row.copy())
     return {"run_id": str(uuid4()), "started_at": datetime.now(timezone.utc).isoformat(),
-            "model_id": " / ".join(ALL_MODELS[tag] for tag in models),
+            "model_id": " / ".join(ALL_MODELS.get(tag, tag.removeprefix('ollama/')) for tag in models),
             "evidence_type": "custom_prompt", "prompt": prompt, "answers": rows}
 
 

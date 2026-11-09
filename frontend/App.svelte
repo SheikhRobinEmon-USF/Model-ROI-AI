@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte'
- type Model={id:string,name:string,installed:boolean,provider?:string,judge_ready?:boolean}
+ type Model={id:string,name:string,installed:boolean,provider?:string,custom?:boolean,judge_ready?:boolean}
  const pages=['Prompt lab','Benchmark','Results','History']
  let page=$state('Prompt lab'), models=$state<Model[]>([]), selected=$state<string[]>([]), prompt=$state(''), suite=$state('analytical'), category=$state('all'), count=$state(6), busy=$state(''), error=$state(''), report=$state<any>(null), history=$state<any[]>([]), excerpt=$state(''), fileName=$state(''), caseIndex=$state(0)
  let chatMenu=$state(false), summaryError=$state(''), summarizing=$state('')
@@ -48,11 +48,24 @@
  async function action(label:string,fn:()=>Promise<void>){if(busy)return;busy=label;error='';try{await fn()}catch(e){error=String(e instanceof Error?e.message:e)}finally{busy=''}}
  let mode=$state<'local'|'hosted'>('local')
  let longContext=$state(false)
- let visibleModels=$derived(models.filter(m=>mode==='hosted'?!!m.provider:!m.provider))
+ let visibleModels=$derived(models.filter(m=>mode==='hosted'?(!!m.provider||m.custom):!m.provider))
  let focused=$state<Record<string,string>>({})
  function switchMode(value:'local'|'hosted'){
    mode=value
    selected=models.filter(m=>m.installed&&(value==='hosted'?!!m.provider:!m.provider)).slice(0,value==='hosted'?3:2).map(m=>m.id)
+ }
+ let deployOpen=$state(false), deployName=$state(''), deployBase=$state(''), instructions=$state('')
+ function openDeployment(){
+   deployBase=models.find(m=>!m.provider&&m.installed)?.id??''
+   deployOpen=true
+ }
+ async function deploy(){
+   await action('Deploying model to Ollama',async()=>{
+     const model=await api('models/deploy',post({name:deployName,base:deployBase.replace(/^ollama\//,''),instructions}))
+     models=await api('models')
+     if(selected.length<5&&!selected.includes(model.id))selected=[...selected,model.id]
+     deployName='';instructions='';deployOpen=false
+   })
  }
  async function refresh(){await action('Checking model availability',async()=>{models=await api('models');switchMode(mode)})}
  let feed=$state<HTMLElement>(), editor=$state<HTMLTextAreaElement>(), copied=$state<number|null>(null)
@@ -77,7 +90,7 @@
  const isPrompt=page==='Prompt lab'
  visited=[];stage('prepare')
  const path=isPrompt?'prompt':'benchmark'
- const payload=isPrompt?{models:selected,prompt:input,long_context:mode==='hosted'&&longContext,reference_answer:reference.trim(),parent_id:turns.at(-1)?.run_id??null}:{models:selected,suite,count,category}
+ const payload=isPrompt?{models:selected,hosted_judge:mode==='hosted',prompt:input,long_context:mode==='hosted'&&longContext,reference_answer:reference.trim(),parent_id:turns.at(-1)?.run_id??null}:{models:selected,hosted_judge:mode==='hosted',suite,count,category}
  const turnIndex=turns.length
  const partial:any={prompt:input,answers:[],started_at:new Date().toISOString()}
  if(isPrompt){turns=[...turns,partial];copied=null;await bottom()}
@@ -120,8 +133,11 @@
 {#snippet modeSwitch()}
 <div class="mode-switch" aria-label="Inference location">{#each ['local','hosted'] as value}<button disabled={!!busy} aria-pressed={mode===value} onclick={()=>switchMode(value as 'local'|'hosted')}>{value==='local'?'Local':'Hosted'}</button>{/each}</div>
 {/snippet}
+{#snippet deployment()}
+<button disabled={!!busy} onclick={openDeployment}>Deploy model</button>
+{/snippet}
 {#snippet routingNote()}
-{#if mode==='hosted'}<p class="routing-note">Selected providers receive your question, excerpts and conversation context. Groq receives grading evidence and reference answers. Judge · GPT-OSS 120B.{#if !visibleModels.some(m=>m.judge_ready)} Configure GROQ_API_KEY to enable grading.{/if}</p>{/if}
+{#if mode==='hosted'}<p class="routing-note">Hosted responders receive your question, excerpts and context. Your Ollama models generate locally. Groq receives grading evidence and reference answers. Judge · GPT-OSS 120B.{#if !visibleModels.some(m=>m.judge_ready)} Configure GROQ_API_KEY to enable grading.{/if}</p>{/if}
 {/snippet}
 <header><div class="brand"><span class="mark" aria-hidden="true">≋</span>ModelROI</div><span class="studio">Evaluation studio</span><div class="runtime"><i></i> Local workspace</div></header>
 <div class="shell"><nav aria-label="Workspace">
@@ -131,6 +147,13 @@
 {#if error}<p role="alert" class="alert">{error}</p>{/if}
 {#if busy}<section class="processing"><div role="status"><i class="activity" aria-hidden="true"></i>{busy}…</div>
 {#if phase}<ol aria-label="Evaluation stages">{#each stages as item}<li class:current={phase===item[0]} class:done={phase!==item[0]&&visited.includes(item[0])} aria-current={phase===item[0]?'step':undefined}>{item[1]}</li>{/each}</ol>{/if}</section>{/if}
+{#if deployOpen}<section class="panel deploy-form" aria-label="Deploy a model"><form onsubmit={(e)=>{e.preventDefault();deploy()}}>
+<h2>Deploy your model</h2><p>Create a local Ollama responder with its own instructions. If you already imported your own weights into Ollama, refresh the model list to select them.</p>
+<label>Model name<input bind:value={deployName} required maxlength="63" pattern="[a-z0-9][a-z0-9_\-]*" placeholder="support-analyst-v1"></label>
+<label>Installed base model<select bind:value={deployBase}>{#each models.filter(m=>!m.provider&&m.installed) as m}<option value={m.id}>{m.name}</option>{/each}</select></label>
+<label>Model instructions<textarea bind:value={instructions} required maxlength="8000" placeholder="How should this model answer?"></textarea></label>
+<button type="submit" disabled={!!busy||!deployBase||!instructions.trim()||!deployName.trim()}>Deploy to Ollama</button><button type="button" disabled={!!busy} onclick={()=>deployOpen=false}>Cancel</button>
+</form></section>{/if}
 {#if page==='Prompt lab'||page==='Benchmark'}
 {#if page==='Prompt lab'}
 <div class="chat-workspace"><button class="mobile-chats" aria-expanded={chatMenu} onclick={()=>chatMenu=!chatMenu}>Chat history</button>
@@ -144,7 +167,7 @@
 {:else}<button onclick={()=>{editMode='rename';newTitle=chat.title}}>Rename</button><button onclick={()=>manage(chat,chat.pinned?'unpin':'pin')}>{chat.pinned?'Unpin':'Pin'}</button><button onclick={()=>editMode='delete'}>Delete</button>{/if}
 <button onclick={()=>{menu='';editMode=''}}>Cancel</button></div>{/if}</div>{:else}<small>Your conversations will appear here.</small>{/each}</aside>
 <section class="chat-space">
-<div class="chat-tools">{@render modeSwitch()}<details><summary>Models · {selected.length}</summary><div class="model-menu panel">{#each visibleModels as m}<label><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed}> {m.name}<small>{m.provider??'Ollama'} · {m.installed?'Ready':'Setup needed'}</small></label>{/each}<button disabled={!!busy} onclick={refresh}>Refresh model status</button></div></details>
+<div class="chat-tools">{@render modeSwitch()}{@render deployment()}<details><summary>Models · {selected.length}</summary><div class="model-menu panel">{#each visibleModels as m}<label><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed||(selected.length>=5&&!selected.includes(m.id))}> {m.name}<small>{m.custom?'Your model · Ollama':m.provider??'Ollama'} · {m.installed?'Ready':'Setup needed'}</small></label>{/each}<button disabled={!!busy} onclick={refresh}>Refresh model status</button></div></details>
 <button disabled={!!busy} onclick={newChat}>＋ New chat</button></div>
 {@render routingNote()}
 {#if mode==='hosted'}<label class="context-option"><input type="checkbox" bind:checked={longContext} disabled={!!busy}> Longer chat history · up to 32 turns</label>{/if}
@@ -167,8 +190,8 @@
 </section></div>{/if}
 {#if page==='Benchmark'}<div class="layout"><section class="panel"><fieldset disabled={!!busy}>
 <h2>Workload</h2><label for="suite">Evaluation set</label><select id="suite" bind:value={suite} onchange={()=>{count=5;category="all"}}><option value="analytical">Analytical challenges</option><option value="standard">Built-in graded cases</option></select><label for="category">Task category</label><select id="category" bind:value={category}><option value="all">All categories</option>{#each (suite==="analytical"?["math","coding","case_study"]:["structured_extraction","hospital_finance_qa","instruction_following_classification"]) as c}<option value={c}>{c.replaceAll("_"," ")}</option>{/each}</select><label for="cases">Cases per model</label><input id="cases" type="number" min="1" max={suite==='standard'?50:6} bind:value={count}><p class="muted">Each model receives identical cases. Outputs are checked against the same expected answers.</p>
-</fieldset></section><aside class="panel"><h2>Models</h2>{@render modeSwitch()}{@render routingNote()}
-{#each visibleModels as m,i}<label class="model"><span class={'dot d'+i}></span><span>{m.name}<code>{m.id}</code></span><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed}></label>{#if !m.installed}<code>{m.provider?'Configure '+m.provider+' credentials':'ollama pull '+m.id}</code>{/if}{/each}
+</fieldset></section><aside class="panel"><h2>Models</h2>{@render modeSwitch()}{@render deployment()}{@render routingNote()}
+{#each visibleModels as m,i}<label class="model"><span class={'dot d'+i}></span><span>{m.name}<code>{m.id}</code></span><input type="checkbox" value={m.id} bind:group={selected} disabled={!!busy||!m.installed||(selected.length>=5&&!selected.includes(m.id))}></label>{#if !m.installed}<code>{m.provider?'Configure '+m.provider+' credentials':'ollama pull '+m.id}</code>{/if}{/each}
 <button class="link" disabled={!!busy} onclick={refresh}>Refresh model status</button><hr>
 <button class="primary" disabled={!!busy||!selected.length||(page==='Prompt lab'&&!prompt.trim())||(page==='Benchmark'&&(!Number.isInteger(count)||count<1||count>(suite==='standard'?50:6)))} onclick={execute}>{page==='Prompt lab'?'Compare answers':'Run benchmark'} →</button><p class="foot">Runs sequentially · {mode==='local'?'Ollama':'provider APIs'}</p></aside></div>{/if}
 {:else if page==='History'}

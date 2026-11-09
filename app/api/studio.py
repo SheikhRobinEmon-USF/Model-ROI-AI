@@ -18,13 +18,13 @@ from contextlib import contextmanager
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from functools import partial
-from app.providers import hosted
+from app.providers import custom, hosted
 from app.graders.quality import rating, comparison_summary
 from app.datasets.analytical import analytical_cases
 from app.datasets.attachments import extract
 from app.datasets.validate import validate_jsonl
 from app.execution.local_run import run
-from app.providers.local import installed_match, request
+from app.providers.local import generate, installed_match, request
 from app.storage.history import benchmark_analytics, delete_chat, load, list_runs, save
 from app.ui.comparison import MODELS, compare, mix_workloads
 from app.ui.prompt_compare import evaluate, grade_remaining
@@ -55,11 +55,24 @@ def exclusive():
 
 
 class Settings(BaseModel):
+    hosted_judge: bool = False
     models: list[str] = Field(min_length=1,max_length=5)
     @model_validator(mode="after")
     def known_models(self):
-        if len(set(self.models)) != len(self.models) or (not set(self.models) <= MODELS.keys() and not set(self.models) <= hosted.ROUTES.keys()):
-            raise ValueError("Select distinct supported models.")
+        ids = set(self.models)
+        custom_ids = {model for model in ids if model.startswith(custom.PREFIX)}
+        fixed = ids - custom_ids
+        if len(ids) != len(self.models) or not (fixed <= MODELS.keys() or fixed <= hosted.ROUTES.keys()):
+            raise ValueError("Select distinct supported responders.")
+        if self.hosted_judge and fixed & MODELS.keys():
+            raise ValueError("Choose local judging for built-in local responders.")
+        if custom_ids:
+            try:
+                available = custom.inventory(request("/api/tags").get("models", []), MODELS)
+            except OSError as exc:
+                raise ValueError("Open Ollama to test a custom model.") from exc
+            if not custom_ids <= {item["id"] for item in available}:
+                raise ValueError("Refresh the model list and select an installed custom model.")
         return self
 
 class Question(Settings):
@@ -81,14 +94,42 @@ def models():
         tags = []
     return [{"id":tag,"name":name,"installed":bool(installed_match(tag,tags))} for tag,name in MODELS.items()] + [
         {"id": tag, "name": route.label, "provider": route.provider, "installed": hosted.configured(route),
-         "judge_ready": hosted.configured(hosted.JUDGE_ROUTE)} for tag, route in hosted.ROUTES.items()]
+         "judge_ready": hosted.configured(hosted.JUDGE_ROUTE)} for tag, route in hosted.ROUTES.items()] + custom.inventory(tags, MODELS)
+
+class ModelDeployment(BaseModel):
+    name: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,62}$")
+    base: str = Field(min_length=1, max_length=250)
+    instructions: str = Field(min_length=1, max_length=8000)
+
+
+@router.post("/models/deploy")
+def deploy(body: ModelDeployment):
+    with exclusive():
+        target = "modelroi/" + body.name + ":latest"
+        try:
+            tags = request("/api/tags").get("models", [])
+            if installed_match(target, tags):
+                raise HTTPException(409, "That model name already exists. Choose a new version name.")
+            bases = set(MODELS) | {custom.tag_for(m["id"]) for m in custom.inventory(tags, MODELS)}
+            if body.base not in bases or not installed_match(body.base, tags):
+                raise HTTPException(422, "Select an installed local base model.")
+            if not body.instructions.strip():
+                raise HTTPException(422, "Enter instructions for this responder.")
+            result = request("/api/create", {"model": target, "from": body.base,
+                             "system": body.instructions.strip(), "stream": False}, timeout=600)
+            if result.get("status") != "success":
+                raise HTTPException(502, "Ollama did not confirm deployment.")
+        except (OSError, ValueError) as exc:
+            raise HTTPException(503, "Check that Ollama is running and the base model can be loaded.") from exc
+        return {"id": custom.PREFIX + target, "name": target}
+
 
 @router.post("/prompt")
 def prompt(body: Question):
     with exclusive():
         previous = []
         parent = body.parent_id
-        if body.long_context and body.models[0] not in hosted.ROUTES:
+        if body.long_context and not (body.hosted_judge or any(m in hosted.ROUTES for m in body.models)):
             raise HTTPException(422, "Long hosted context requires hosted responders.")
         max_turns = 32 if body.long_context else chat_budget().turns
         while parent and len(previous) < max_turns:
@@ -104,7 +145,7 @@ def prompt(body: Question):
         else:
             result = (evaluate(body.prompt, body.models, previous) if previous
                       else evaluate(body.prompt, body.models))
-        if body.models[0] in hosted.ROUTES:
+        if body.hosted_judge or any(m in hosted.ROUTES for m in body.models):
             result["judge_model"] = hosted.JUDGE
         if body.reference_answer.strip():
             result["reference_answer"] = body.reference_answer.strip()
@@ -126,8 +167,13 @@ def benchmark(body: Benchmark):
             raise HTTPException(422,"No cases match that category.")
         cases=mix_workloads(cases)[:body.count]
         emit("status", phase="generate", message="Running the first benchmark case")
-        remote = body.models[0] in hosted.ROUTES
-        runner = hosted.generate if remote else None
+        remote = body.hosted_judge or any(m in hosted.ROUTES for m in body.models)
+        runner = None
+        if remote:
+            def runner(model, prompt):
+                if model in hosted.ROUTES:
+                    return hosted.generate(model, prompt)
+                return generate(model, prompt)
         if len(body.models)>1:
             result=compare(cases,body.models,generate_fn=runner,progress=lambda fraction,model:emit("status",phase="generate",message=f"Evaluating {model} · {fraction:.0%} of generations complete"))
         else:

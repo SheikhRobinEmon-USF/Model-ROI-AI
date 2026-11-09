@@ -1,4 +1,5 @@
 """Local-only model probe. No remote URL or paid-provider fallback."""
+from app.providers.custom import PREFIX, tag_for
 from app.chat_context import chat_budget
 from app.execution.performance import current
 import argparse
@@ -26,6 +27,8 @@ def installed_match(model, installed):
     return None
 
 def generate(model, prompt, history=(), *, keep_alive=0):
+    custom = model.startswith(PREFIX)
+    model = tag_for(model)
     state = current.get()
     if state is None or state.inventory is None:
         installed = request('/api/tags').get('models', [])
@@ -41,7 +44,7 @@ def generate(model, prompt, history=(), *, keep_alive=0):
     payload = {'model': match.get('name') or match['model'], 'messages': [*history, {'role': 'user', 'content': prompt}],
                'stream': False, 'options': options, 'keep_alive': keep_alive}
     # Phi has no configurable thinking mode.
-    if model.split(':')[0] != 'phi4-mini':
+    if not custom and model.split(':')[0] != 'phi4-mini':
         payload['think'] = False
     result = request('/api/chat', payload)
     if not result.get('done'):

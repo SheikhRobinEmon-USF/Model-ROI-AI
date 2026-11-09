@@ -67,3 +67,7 @@ For a custom grading target, select **Reference answer** in the composer before 
 ## Hosted model comparison
 
 Choose **Hosted** in Prompt lab or Benchmark to evaluate up to five API responders. The hosted judge is OpenAI GPT-OSS 120B served by Groq. Local mode uses Ollama and its original judge. Each run uses one mode. Answer selectors show the model, grade and observed response time when three or more answers arrive. [Hosted setup and credentials](SETUP.md#hosted-api-mode)
+
+## Test your own model
+
+In Prompt lab or Benchmark, choose **Deploy model**, select an installed Ollama base, name the new responder and give it system instructions. It becomes a separate candidate in the model picker. Local and hosted comparisons support up to five responders, including user models. To evaluate your own trained weights, see [Import your own model](SETUP.md#import-your-own-model).

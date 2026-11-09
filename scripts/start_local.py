@@ -26,8 +26,8 @@ def main():
                 models=json.load(response).get('models',[])
         except OSError:
             raise SystemExit('Open the Ollama app, or run ollama serve in another terminal, then retry.')
-        if not any(m.get('name')=='qwen3:4b' for m in models):
-            print('Qwen3 4B is not installed. Downloading it uses several GB of disk and network data.')
+        if not models:
+            print('No Ollama models are installed. Downloading Qwen3 4B uses several GB of disk and network data.')
             if input('Download qwen3:4b now? [y/N] ').strip().lower()!='y':
                 raise SystemExit('No model downloaded.')
             subprocess.run([ollama,'pull','qwen3:4b'],check=True)
