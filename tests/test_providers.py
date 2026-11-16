@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace as N
 from unittest.mock import AsyncMock
-from app.providers.adapters import OpenAIAdapter,AnthropicAdapter
+from modelroi.providers.adapters import OpenAIAdapter,AnthropicAdapter
 
 def test_openai_missing_usage():
     create=AsyncMock(return_value=N(output_text='{}',model='test',usage=None))

@@ -5,10 +5,10 @@ from collections import defaultdict
 from uuid import uuid4
 
 
-from app.evaluation import paired_exact, percentile
-from app.execution.local_run import run
-from app.providers.hosted import ROUTES
-from app.providers.custom import PREFIX, tag_for
+from modelroi.evaluation import paired_exact, percentile
+from modelroi.execution.local_run import run
+from modelroi.providers.hosted import ROUTES
+from modelroi.providers.custom import PREFIX, tag_for
 
 MODELS = {"qwen3:4b": "Qwen3 4B", "gemma4:e4b": "Gemma 4 E4B"}
 ALL_MODELS = {**MODELS, **{model: route.label for model, route in ROUTES.items()}}

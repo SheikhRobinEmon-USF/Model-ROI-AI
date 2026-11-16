@@ -60,7 +60,7 @@ def main():
                 time.sleep(0.5)
     threading.Thread(target=open_studio, daemon=True).start()
     print(f"Starting ModelROI at {url}. Press Control+C to stop.", flush=True)
-    subprocess.run([str(executable), "-m", "uvicorn", "app.api.main:app",
+    subprocess.run([str(executable), "-m", "uvicorn", "modelroi.api.main:app",
                     "--host", "127.0.0.1", "--port", str(port)],
                    cwd=ROOT, env=environment, check=True)
 

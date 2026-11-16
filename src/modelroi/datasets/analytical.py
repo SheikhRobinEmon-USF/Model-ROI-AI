@@ -1,5 +1,5 @@
 """Original synthetic problems with checkable intermediate and final answers."""
-from app.datasets.validate import EvalCase
+from modelroi.datasets.validate import EvalCase
 
 PROBLEMS = {
     "Math": [

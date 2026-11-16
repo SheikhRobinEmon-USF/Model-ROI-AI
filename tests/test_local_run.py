@@ -1,5 +1,5 @@
-from app.execution.local_run import run
-from app.datasets.validate import EvalCase
+from modelroi.execution.local_run import run
+from modelroi.datasets.validate import EvalCase
 
 def case():
     return EvalCase(case_id='a',task_type='structured_extraction',input='x',expected={'amount':'1.00'},grader='json_exact',dataset_version='v1',source_license='original_synthetic',split='dev',review_status='pending_human_review')

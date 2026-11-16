@@ -2,7 +2,7 @@
 import json
 from urllib.error import HTTPError
 
-from app.providers.local import request
+from modelroi.providers.local import request
 
 JUDGE = "qwen3.8:27b"
 SCHEMA = {

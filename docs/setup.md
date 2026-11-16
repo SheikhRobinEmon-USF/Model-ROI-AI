@@ -1,4 +1,4 @@
-# Free local model setup: Windows, macOS, Linux
+# Setup: Windows, macOS, Linux
 
 Policy updated November 6, 2026: no paid APIs. Use local downloadable weights with Ollama. Hugging Face is the model source; local computation uses your own RAM, CPU/GPU and electricity. Hosted inference is not automatically free because weights are downloadable.
 
@@ -85,11 +85,11 @@ Q8 uses more memory than the default quantized Ollama tag. Hugging Face Transfor
 
 Windows:
 ```powershell
-.\.venv\Scripts\python.exe -m app.providers.local --model qwen3:4b
+.\.venv\Scripts\python.exe -m modelroi.providers.local --model qwen3:4b
 ```
 macOS/Linux (activated environment):
 ```bash
-python -m app.providers.local --model qwen3:4b
+python -m modelroi.providers.local --model qwen3:4b
 ```
 
 The probe calls only `127.0.0.1:11434`, never a paid provider. Models must already be downloaded. This is an inference probe, not a complete benchmark. It records the installed model digest when available. Do not claim cross-machine reproducibility without recording Ollama version, hardware, quantization and settings as well.
@@ -98,11 +98,11 @@ The probe calls only `127.0.0.1:11434`, never a paid provider. Models must alrea
 
 Windows:
 ```powershell
-.\.venv\Scripts\python.exe -m streamlit run app/ui/Home.py
+.\.venv\Scripts\python.exe -m streamlit run src/modelroi/ui/Home.py
 ```
 macOS/Linux:
 ```bash
-python -m streamlit run app/ui/Home.py
+python -m streamlit run src/modelroi/ui/Home.py
 ```
 
 Open http://localhost:8501. The current dashboard still runs the five-case mock; the local probe is separate. Full local-model benchmark/dashboard integration remains unfinished. Paid routes remain disabled.

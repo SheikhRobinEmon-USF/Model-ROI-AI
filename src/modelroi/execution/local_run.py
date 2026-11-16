@@ -4,9 +4,9 @@ from hashlib import sha256
 import json
 from time import perf_counter
 from uuid import uuid4
-from app.providers.local import generate
-from app.graders.exact import grade, structure_metrics
-from app.evaluation import wilson, percentile
+from modelroi.providers.local import generate
+from modelroi.graders.exact import grade, structure_metrics
+from modelroi.evaluation import wilson, percentile
 
 def run(cases, model='qwen3:4b', progress=None, generate_fn=None):
     rows=[]

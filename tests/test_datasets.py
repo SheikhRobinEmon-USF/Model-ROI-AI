@@ -1,8 +1,8 @@
 from pathlib import Path
 import json
 import pytest
-from app.datasets.validate import validate_jsonl
-from app.graders.exact import grade
+from modelroi.datasets.validate import validate_jsonl
+from modelroi.graders.exact import grade
 
 def cases():
     return validate_jsonl((Path(__file__).parents[1]/'datasets/v1/draft_cases.jsonl').read_bytes())

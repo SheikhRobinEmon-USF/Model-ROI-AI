@@ -1,6 +1,6 @@
 from uuid import uuid4
 import pytest
-from app.storage.history import save,load,list_runs
+from modelroi.storage.history import save,load,list_runs
 
 def test_history_survives_reload(tmp_path,monkeypatch):
     monkeypatch.setenv('MODELROI_HISTORY_DIR',str(tmp_path))
@@ -16,7 +16,7 @@ def test_no_path_traversal():
 
 def test_legacy_migration_and_duckdb_metrics(tmp_path, monkeypatch):
     import json
-    from app.storage.history import benchmark_analytics
+    from modelroi.storage.history import benchmark_analytics
     monkeypatch.setenv("MODELROI_HISTORY_DIR", str(tmp_path))
     key = str(uuid4())
     run = {"run_id": key, "model_id": "qwen3:4b", "started_at": "2026-11-08", "results": [

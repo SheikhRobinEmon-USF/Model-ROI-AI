@@ -3,16 +3,16 @@ import os
 from pathlib import Path
 import pandas as pd
 import streamlit as st
-from app.evaluation import run_demo
-from app.providers.local import request, installed_match
-from app.ui import prompt_compare
-from app.datasets.validate import validate_jsonl
-from app.execution.local_run import run
-from app.storage.history import save, load, list_runs
+from modelroi.evaluation import run_demo
+from modelroi.providers.local import request, installed_match
+from modelroi.ui import prompt_compare
+from modelroi.datasets.validate import validate_jsonl
+from modelroi.execution.local_run import run
+from modelroi.storage.history import save, load, list_runs
 
 st.set_page_config(page_title='ModelROI | Evaluation studio',page_icon='◈',layout='wide')
-from app.ui.comparison import MODELS, compare, show, mix_workloads
-from app.ui.theme import apply
+from modelroi.ui.comparison import MODELS, compare, show, mix_workloads
+from modelroi.ui.theme import apply
 apply()
 local_enabled=os.getenv('MODELROI_ENABLE_LOCAL','false').lower()=='true'
 if 'page' not in st.session_state:
@@ -65,9 +65,9 @@ elif page=='Benchmark':
     if source == 'My question':
         prompt_compare.panel(local_enabled)
         st.stop()
-    path=Path(__file__).resolve().parents[2]/'datasets/v1/draft_cases.jsonl'
+    path=Path(__file__).resolve().parents[3]/'datasets/v1/draft_cases.jsonl'
     if source == 'Analytical challenges':
-        from app.datasets.analytical import analytical_cases
+        from modelroi.datasets.analytical import analytical_cases
         cases = analytical_cases()
         st.write('Score one point per problem when every requested field matches the answer key. Errors and truncated answers receive zero.')
         topic = st.selectbox('Challenge type', ['All', 'Math', 'Coding', 'Case study'])

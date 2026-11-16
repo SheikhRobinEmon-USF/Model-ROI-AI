@@ -21,7 +21,7 @@ with socket.socket() as probe:
     probe.bind(("127.0.0.1", 0))
     port = probe.getsockname()[1]
 url = f"http://127.0.0.1:{port}"
-server = subprocess.Popen([str(python), "-m", "streamlit", "run", "app/ui/Pilot.py",
+server = subprocess.Popen([str(python), "-m", "streamlit", "run", "src/modelroi/ui/Pilot.py",
                            "--server.address=127.0.0.1", f"--server.port={port}",
                            "--server.headless=true"], cwd=root, env=env)
 try:

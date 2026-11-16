@@ -1,8 +1,8 @@
 import json
 from unittest.mock import patch
 from fastapi.testclient import TestClient
-from app.api.main import app
-from app.providers import hosted
+from modelroi.api.main import app
+from modelroi.providers import hosted
 
 
 def test_hosted_run_and_judge(tmp_path, monkeypatch):

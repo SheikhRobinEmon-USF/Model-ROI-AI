@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from app.evaluation import run_demo
+from modelroi.evaluation import run_demo
 app = FastAPI(title='ModelROI AI', version='0.1.0')
 
 @app.get('/health')
@@ -16,9 +16,9 @@ def paid_run():
 
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
-from app.api.studio import router
+from modelroi.api.studio import router
 
 app.include_router(router)
-bundle = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+bundle = Path(__file__).resolve().parents[3] / "web" / "dist"
 if bundle.is_dir():
     app.mount("/", StaticFiles(directory=bundle, html=True), name="studio")

@@ -1,7 +1,7 @@
 """Local-only model probe. No remote URL or paid-provider fallback."""
-from app.providers.custom import PREFIX, tag_for
-from app.chat_context import chat_budget
-from app.execution.performance import current
+from modelroi.providers.custom import PREFIX, tag_for
+from modelroi.chat_context import chat_budget
+from modelroi.execution.performance import current
 import argparse
 import json
 from time import perf_counter

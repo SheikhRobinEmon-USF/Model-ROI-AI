@@ -362,6 +362,8 @@ Return `eligible`, `ineligible_reasons`, `winner_model_id`, `metrics`, `caveats`
 
 # 9. CANONICAL REPOSITORY LAYOUT AND DEPLOYMENT
 
+> Current layout: the package now lives in `src/modelroi/` and the studio in `web/`; see the project structure in the README. The layout below is the original plan, kept for reference.
+
 Use the single `app/` Python package below. Hosting is **one Docker Compose deployment**, with two containers (FastAPI API + Streamlit UI) on a host that supports Docker; the UI addresses `http://api:8000` internally. The public UI serves **offline mock and frozen historical benchmark results only**; all real paid runs require local use or authenticated owner-only access, with server-side provider credentials and hard UI disablement for public users. Store run/ledger state in an owner-only persistent volume (not public Git).
 
 ```text
@@ -387,7 +389,7 @@ modelroi-ai/
   examples/{mock_run.json,measured_run.example_schema.json}
 ```
 
-Startup tests: `pip install -e '.[dev]'`, `pytest -q`, `uvicorn app.api.main:app --reload`, `streamlit run app/ui/Home.py`, `docker compose up --build`. Public demo must use a **labeled recorded result** or mock mode without provider credentials; never accidentally invoke paid APIs from page load or test CI.
+Startup tests: `pip install -e '.[dev]'`, `pytest -q`, `uvicorn modelroi.api.main:app --reload`, `streamlit run src/modelroi/ui/Home.py`, `docker compose up --build`. Public demo must use a **labeled recorded result** or mock mode without provider credentials; never accidentally invoke paid APIs from page load or test CI.
 
 ---
 

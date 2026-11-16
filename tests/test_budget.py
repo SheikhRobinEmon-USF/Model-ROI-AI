@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 import pytest
-from app.execution.budget import Ledger, BudgetError
+from modelroi.execution.budget import Ledger, BudgetError
 
 def test_race():
     ledger = Ledger()

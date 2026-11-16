@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.evaluation_policy import Gates, rank_runs
-from app.graders.exact import grade, structure_metrics
-from app.graders.quality import rating
+from modelroi.evaluation_policy import Gates, rank_runs
+from modelroi.graders.exact import grade, structure_metrics
+from modelroi.graders.quality import rating
 import json
 
 
@@ -19,7 +19,7 @@ def test_supported_structure_can_have_incorrect_values():
 def test_unscoped_grounding_excluded_from_mean():
     dimensions = dict(correctness=9, relevance=10, completeness=7, instruction_following=8, faithfulness=None)
     verdict = {"score": 10, "reason": "Missing a requested example.", "dimensions": dimensions}
-    with patch("app.graders.quality.request", return_value={"done":True, "message":{"content":json.dumps(verdict)}}):
+    with patch("modelroi.graders.quality.request", return_value={"done":True, "message":{"content":json.dumps(verdict)}}):
         assert rating("Explain X", "answer")["score"] == 8.5
 
 

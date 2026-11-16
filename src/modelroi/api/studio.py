@@ -1,34 +1,34 @@
 """Local studio API, enabled only by the desktop launcher."""
-from app.chat_context import chat_budget
+from modelroi.chat_context import chat_budget
 import os
 import json
 from queue import Queue
 from threading import Thread
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
-from app.execution.performance import current, run_scope, emit, rate_once
+from modelroi.execution.performance import current, run_scope, emit, rate_once
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
 from threading import Lock
 from itertools import combinations
-from app.evaluation import paired_exact
-from app.evaluation_policy import Gates, rank_runs
+from modelroi.evaluation import paired_exact
+from modelroi.evaluation_policy import Gates, rank_runs
 from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from functools import partial
-from app.providers import custom, hosted
-from app.graders.quality import rating, comparison_summary
-from app.datasets.analytical import analytical_cases
-from app.datasets.attachments import extract
-from app.datasets.validate import validate_jsonl
-from app.execution.local_run import run
-from app.providers.local import generate, installed_match, request
-from app.storage.history import benchmark_analytics, delete_chat, load, list_runs, save
-from app.ui.comparison import MODELS, compare, mix_workloads
-from app.ui.prompt_compare import evaluate, grade_remaining
+from modelroi.providers import custom, hosted
+from modelroi.graders.quality import rating, comparison_summary
+from modelroi.datasets.analytical import analytical_cases
+from modelroi.datasets.attachments import extract
+from modelroi.datasets.validate import validate_jsonl
+from modelroi.execution.local_run import run
+from modelroi.providers.local import generate, installed_match, request
+from modelroi.storage.history import benchmark_analytics, delete_chat, load, list_runs, save
+from modelroi.ui.comparison import MODELS, compare, mix_workloads
+from modelroi.ui.prompt_compare import evaluate, grade_remaining
 
 
 def private(req: Request):
@@ -162,7 +162,7 @@ def prompt(body: Question):
 def benchmark(body: Benchmark):
     with exclusive():
         emit("status", phase="prepare", message="Selecting matched benchmark cases")
-        cases=analytical_cases() if body.suite=="analytical" else validate_jsonl((Path(__file__).resolve().parents[2]/"datasets/v1/draft_cases.jsonl").read_bytes())
+        cases=analytical_cases() if body.suite=="analytical" else validate_jsonl((Path(__file__).resolve().parents[3]/"datasets/v1/draft_cases.jsonl").read_bytes())
         if body.category != "all":
             cases=[case for case in cases if case.task_type == body.category]
         if not cases:

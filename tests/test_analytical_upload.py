@@ -5,9 +5,9 @@ from docx import Document
 from openpyxl import Workbook
 from pptx import Presentation
 from pypdf import PdfWriter
-from app.datasets.attachments import extract
-from app.datasets.analytical import analytical_cases
-from app.graders.exact import grade
+from modelroi.datasets.attachments import extract
+from modelroi.datasets.analytical import analytical_cases
+from modelroi.graders.exact import grade
 
 def test_analytical_keys():
     cases = analytical_cases()

@@ -1,8 +1,8 @@
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from app.api.main import app
-from app.storage.history import save
+from modelroi.api.main import app
+from modelroi.storage.history import save
 
 
 def test_manage_chat_without_removing_shared_turns(tmp_path, monkeypatch):

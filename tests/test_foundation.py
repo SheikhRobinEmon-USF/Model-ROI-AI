@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
-from app.api.main import app
-from app.evaluation import wilson, paired_exact, percentile, run_demo, mock_answer
+from modelroi.api.main import app
+from modelroi.evaluation import wilson, paired_exact, percentile, run_demo, mock_answer
 
 def test_wilson_reference():
     assert wilson(18,20) == pytest.approx([.69896,.97213], abs=.0001)

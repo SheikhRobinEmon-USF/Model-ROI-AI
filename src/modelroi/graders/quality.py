@@ -1,9 +1,9 @@
 """Local answer-quality scoring using gpt-oss-20b."""
 import json
 import re
-from app.providers.local import request
+from modelroi.providers.local import request
 
-from app.providers import hosted
+from modelroi.providers import hosted
 
 MODEL = "gpt-oss:20b"
 RUBRIC = (

@@ -3,8 +3,8 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
-from app.datasets.validate import validate_jsonl
-from app.ui.comparison import MODELS, compare, mix_workloads
+from modelroi.datasets.validate import validate_jsonl
+from modelroi.ui.comparison import MODELS, compare, mix_workloads
 
 
 def test_matched_comparison_and_results_page():
@@ -20,7 +20,7 @@ def test_matched_comparison_and_results_page():
     result = compare(cases, list(MODELS), generate_fn=generate)
     assert calls == [(m,c.input) for m in MODELS for c in cases]
     assert [r['successful_cases'] for r in result['runs']] == [2,2]
-    app = AppTest.from_file(str(root/'app/ui/Home.py'))
+    app = AppTest.from_file(str(root/'src/modelroi/ui/Home.py'))
     app.session_state.page = 'Results'
     app.session_state.result = result
     app.run()

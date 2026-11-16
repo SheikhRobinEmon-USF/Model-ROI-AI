@@ -5,8 +5,8 @@ from threading import Lock
 
 import streamlit as st
 
-from app.ui.comparison import MODELS
-from app.ui.prompt_compare import display, evaluate, grade_remaining
+from modelroi.ui.comparison import MODELS
+from modelroi.ui.prompt_compare import display, evaluate, grade_remaining
 
 st.set_page_config(page_title="ModelROI | Tester pilot", layout="wide")
 st.title("Compare three local models")

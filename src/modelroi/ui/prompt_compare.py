@@ -1,17 +1,17 @@
 """Compare free-form responses without assuming a reference answer."""
-from app.chat_context import chat_budget
+from modelroi.chat_context import chat_budget
 from datetime import datetime, timezone
 import json
 from uuid import uuid4
 
-from app.execution.performance import emit, rate_once
+from modelroi.execution.performance import emit, rate_once
 
 from functools import partial
-from app.providers import hosted
-from app.graders.quality import MODEL, rating
-from app.providers.local import generate, installed_match, request
-from app.storage.history import save
-from app.ui.comparison import MODELS, ALL_MODELS
+from modelroi.providers import hosted
+from modelroi.graders.quality import MODEL, rating
+from modelroi.providers.local import generate, installed_match, request
+from modelroi.storage.history import save
+from modelroi.ui.comparison import MODELS, ALL_MODELS
 
 
 def evaluate(prompt, models, previous=(), *, history_chars=None):
@@ -125,7 +125,7 @@ def panel(enabled):
                           placeholder="What is the distance from Florida to California?",
                           height=130, max_chars=8000)
     st.session_state.last_question = prompt
-    from app.datasets.attachments import FORMATS, extract
+    from modelroi.datasets.attachments import FORMATS, extract
     attachment = st.file_uploader("Attach a document or dataset",type=FORMATS,
         help="One file up to 5 MB. Preview includes up to 6,000 characters, 20 PDF pages, 101 CSV rows, or 100 rows per sheet across eight sheets.")
     if attachment is not None:
