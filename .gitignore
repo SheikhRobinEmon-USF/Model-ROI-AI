@@ -227,3 +227,5 @@ __marimo__/
 /web/node_modules/
 !/web/dist/
 !/web/dist/**
+!/web/src/lib/
+!/web/src/lib/**
