@@ -27,7 +27,7 @@ On Windows use `py -3.12 scripts/start_local.py` for the last command. Open the 
 
 ## Architecture and evidence
 
-The launcher serves a bundled Svelte and TypeScript frontend from FastAPI. The API streams progress and results over newline-delimited JSON. Ollama runs models sequentially to limit memory pressure. Completed prompt turns and benchmarks are stored under `~/.modelroi/runs`, including submitted excerpts. Public hosting is deferred.
+The launcher serves a bundled Svelte 5, TypeScript and Tailwind CSS frontend from FastAPI. The API streams progress and results over newline-delimited JSON. Ollama runs models sequentially to limit memory pressure. Completed prompt turns and benchmarks are stored under `~/.modelroi/runs`, including submitted excerpts. Public hosting is deferred.
 
 The local runner records model digest when supplied by Ollama, dataset SHA-256, settings, token counts, UTC start time and per-case elapsed time. Exceptions count as failed cases. Truncated outputs fail grading. Exact JSON checks preserve types; numeric 1 does not equal boolean true.
 
@@ -56,7 +56,7 @@ The second command requires Ollama and downloaded weights. Simulated provider te
 
 Original application code is MIT licensed. Qwen3 4B model artifacts retain their Apache 2.0 license and are downloaded separately. See https://huggingface.co/Qwen/Qwen3-4B/blob/main/LICENSE. Model weights are not bundled with this repository.
 
-For the active implementation plan and historical baseline see [the implementation contract](docs/implementation_contract.md). For frontend development run `npm ci` and `npm run build` in `frontend/`, then commit the rebuilt bundle.
+For the active implementation plan and historical baseline see [the implementation contract](docs/implementation_contract.md). For frontend development run `npm ci` and `npm run build` in `frontend/`, then commit the rebuilt bundle. The studio source lives in `frontend/src`: `lib/studio.svelte.ts` holds all state and API calls, `components/` holds the views, and `app.css` defines the design tokens for the dark and light themes. Press Ctrl/⌘ K in the studio for the command palette.
 
 ## Local databases
 
