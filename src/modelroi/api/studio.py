@@ -25,7 +25,10 @@ from modelroi.datasets.analytical import analytical_cases
 from modelroi.datasets.attachments import extract
 from modelroi.datasets.validate import validate_jsonl
 from modelroi.execution.local_run import run
-from modelroi.providers.local import generate, installed_match, request
+from modelroi.providers.local import delete, generate, installed_match, ollama_error, push_blob, request, stream
+from modelroi.storage.history import directory
+import hashlib
+import shutil
 from modelroi.storage.history import benchmark_analytics, delete_chat, load, list_runs, save
 from modelroi.ui.comparison import MODELS, compare, mix_workloads
 from modelroi.ui.prompt_compare import evaluate, grade_remaining
@@ -98,8 +101,35 @@ def models():
         {"id": tag, "name": route.label, "provider": route.provider, "installed": hosted.configured(route),
          "judge_ready": hosted.configured(hosted.JUDGE_ROUTE)} for tag, route in hosted.ROUTES.items()] + custom.inventory(tags, MODELS)
 
+OLLAMA_DOWN = "Ollama is not responding. Open the Ollama app, then try again."
+GGUF_HELP = ("That file is not a GGUF model. Export or convert your weights to GGUF first, "
+             "for example with llama.cpp's convert_hf_to_gguf.py.")
+
+
+def ollama_failure(exc, fallback):
+    """Prefer Ollama's own message; a refused connection means the service is not running."""
+    detail = ollama_error(exc)
+    if detail:
+        return HTTPException(422, "Ollama could not do that: " + detail)
+    return HTTPException(503, fallback if getattr(exc, "code", None) else OLLAMA_DOWN)
+
+
+def installed_tags():
+    try:
+        return request("/api/tags").get("models", [])
+    except OSError as exc:
+        raise HTTPException(503, OLLAMA_DOWN) from exc
+
+
+def free_name(name, installed):
+    target = custom.NAMESPACE + name + ":latest"
+    if installed_match(target, installed):
+        raise HTTPException(409, "That model name already exists. Choose a new version name.")
+    return target
+
+
 class ModelDeployment(BaseModel):
-    name: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,62}$")
+    name: str = Field(pattern=custom.NAME)
     base: str = Field(min_length=1, max_length=250)
     instructions: str = Field(min_length=1, max_length=8000)
 
@@ -107,23 +137,145 @@ class ModelDeployment(BaseModel):
 @router.post("/models/deploy")
 def deploy(body: ModelDeployment):
     with exclusive():
-        target = "modelroi/" + body.name + ":latest"
+        installed = installed_tags()
+        target = free_name(body.name, installed)
+        bases = set(MODELS) | {custom.tag_for(m["id"]) for m in custom.inventory(installed, MODELS)}
+        if body.base not in bases or not installed_match(body.base, installed):
+            raise HTTPException(422, "Select an installed local base model.")
+        if not body.instructions.strip():
+            raise HTTPException(422, "Enter instructions for this responder.")
         try:
-            tags = request("/api/tags").get("models", [])
-            if installed_match(target, tags):
-                raise HTTPException(409, "That model name already exists. Choose a new version name.")
-            bases = set(MODELS) | {custom.tag_for(m["id"]) for m in custom.inventory(tags, MODELS)}
-            if body.base not in bases or not installed_match(body.base, tags):
-                raise HTTPException(422, "Select an installed local base model.")
-            if not body.instructions.strip():
-                raise HTTPException(422, "Enter instructions for this responder.")
             result = request("/api/create", {"model": target, "from": body.base,
                              "system": body.instructions.strip(), "stream": False}, timeout=600)
-            if result.get("status") != "success":
-                raise HTTPException(502, "Ollama did not confirm deployment.")
         except (OSError, ValueError) as exc:
-            raise HTTPException(503, "Check that Ollama is running and the base model can be loaded.") from exc
+            raise ollama_failure(exc, "Ollama could not load the base model.") from exc
+        if result.get("status") != "success":
+            raise HTTPException(502, "Ollama did not confirm deployment.")
         return {"id": custom.PREFIX + target, "name": target}
+
+
+def upload_folder():
+    """Uploads are staged beside saved runs, on disk, never in a memory-backed temp directory."""
+    folder = directory().parent / "uploads"
+    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for stale in folder.glob("*.part"):
+        stale.unlink(missing_ok=True)
+    return folder
+
+
+@router.post("/models/upload")
+async def upload_model(req: Request, name: str):
+    """Receive a GGUF file, verify it and hand it to Ollama's blob store."""
+    if not name.lower().endswith(".gguf"):
+        raise HTTPException(422, GGUF_HELP)
+    with exclusive():
+        folder = upload_folder()
+        declared = int(req.headers.get("content-length") or 0)
+        # The file exists twice until Ollama has copied it into its own store.
+        if declared and shutil.disk_usage(folder).free < 2 * declared:
+            raise HTTPException(507, f"Not enough free disk space. Importing this model needs about {2 * declared / 1e9:.1f} GB free.")
+        staged = folder / "model.part"
+        digest, size = hashlib.sha256(), 0
+        try:
+            with staged.open("wb") as target:
+                async for part in req.stream():
+                    if size < 4 and not (b"GGUF"[size:size + len(part)] == part[:4 - size]):
+                        raise HTTPException(422, GGUF_HELP)
+                    digest.update(part)
+                    target.write(part)
+                    size += len(part)
+            if size < 4:
+                raise HTTPException(422, GGUF_HELP)
+            blob = "sha256:" + digest.hexdigest()
+            try:
+                await run_in_threadpool(push_blob, blob, staged, size)
+            except OSError as exc:
+                raise ollama_failure(exc, "Ollama rejected the uploaded file.") from exc
+            return {"digest": blob, "size": size, "file": Path(name).name}
+        finally:
+            staged.unlink(missing_ok=True)
+
+
+class ModelImport(BaseModel):
+    name: str = Field(pattern=custom.NAME)
+    digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    file: str = Field(min_length=6, max_length=255, pattern=r"(?i)^[^/\\]+\.gguf$")
+    instructions: str = Field(default="", max_length=8000)
+
+
+@router.post("/models/import")
+def import_model(body: ModelImport):
+    """Register an uploaded GGUF file as a model the studio can compare."""
+    with exclusive():
+        target = free_name(body.name, installed_tags())
+        payload = {"model": target, "files": {body.file: body.digest}, "stream": False}
+        if body.instructions.strip():
+            payload["system"] = body.instructions.strip()
+        try:
+            result = request("/api/create", payload, timeout=1800)
+        except (OSError, ValueError) as exc:
+            raise ollama_failure(exc, "Ollama could not read that model file.") from exc
+        if result.get("status") != "success":
+            raise HTTPException(502, "Ollama did not confirm the import.")
+        return {"id": custom.PREFIX + target, "name": target}
+
+
+class ModelPull(BaseModel):
+    model: str = Field(min_length=1, max_length=260)
+
+    @model_validator(mode="after")
+    def pullable(self):
+        self.model = self.model.strip().removeprefix("https://")
+        if self.model.startswith("huggingface.co/"):
+            self.model = "hf.co/" + self.model.removeprefix("huggingface.co/")
+        if not custom.REFERENCE.match(self.model) or custom.is_cloud(self.model):
+            raise ValueError("Enter a model name such as llama3.2:1b or hf.co/user/repo:Q4_K_M.")
+        return self
+
+
+@router.post("/live/models/pull")
+def pull_model(body: ModelPull):
+    """Download a model through Ollama, relaying its progress line by line."""
+    def lines():
+        def event(**fields):
+            return json.dumps(fields) + "\n"
+        if not lock.acquire(False):
+            yield event(event="error", message="Another evaluation is running.")
+            return
+        try:
+            for update in stream("/api/pull", {"model": body.model, "stream": True}):
+                if update.get("error"):
+                    yield event(event="error", message="Ollama could not download that model: " + str(update["error"]))
+                    return
+                yield event(event="progress", status=update.get("status", ""), completed=update.get("completed"), total=update.get("total"))
+            match = installed_match(body.model, request("/api/tags").get("models", [])) or {}
+            name = match.get("name") or body.model
+            yield event(event="complete", model={"id": name if name in MODELS else custom.PREFIX + name, "name": name})
+        except OSError as exc:
+            detail = ollama_error(exc)
+            yield event(event="error", message="Ollama could not download that model: " + detail if detail else OLLAMA_DOWN)
+        finally:
+            lock.release()
+    return StreamingResponse(lines(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+
+class ModelRemoval(BaseModel):
+    id: str = Field(min_length=1, max_length=300)
+
+
+@router.post("/models/remove")
+def remove_model(body: ModelRemoval):
+    """Delete one of the user's own models from Ollama. Built-in candidates and the judge are never removable."""
+    with exclusive():
+        if body.id in MODELS or custom.tag_for(body.id) == custom.JUDGE:
+            raise HTTPException(422, "Built-in models and the judge cannot be removed here.")
+        if body.id not in {m["id"] for m in custom.inventory(installed_tags(), MODELS)}:
+            raise HTTPException(404, "That model is no longer installed.")
+        try:
+            delete(custom.tag_for(body.id))
+        except OSError as exc:
+            raise ollama_failure(exc, "Ollama could not remove that model.") from exc
+        return {"removed": body.id}
 
 
 @router.post("/prompt")

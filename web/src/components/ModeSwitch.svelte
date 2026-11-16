@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Cloud, Cpu, Rocket } from '@lucide/svelte'
+  import { Cloud, Cpu, PackagePlus } from '@lucide/svelte'
   import { studio } from '../lib/studio.svelte'
   let { compact = false }: { compact?: boolean } = $props()
 </script>
@@ -13,6 +13,6 @@
     </button>
   {/each}
 </div>
-<button class="btn btn-sm {compact ? 'max-sm:w-8 max-sm:px-0' : ''}" disabled={!!studio.busy} onclick={studio.openDeployment} aria-label="Deploy model">
-  <Rocket size={14} aria-hidden="true" /><span class={compact ? 'max-sm:hidden' : ''}>Deploy model</span>
+<button class="btn btn-sm {compact ? 'max-sm:w-8 max-sm:px-0' : ''}" disabled={!!studio.busy} onclick={() => studio.openAddModel()} aria-label="Add model">
+  <PackagePlus size={14} aria-hidden="true" /><span class={compact ? 'max-sm:hidden' : ''}>Add model</span>
 </button>

@@ -201,14 +201,16 @@ Start with one prompt before a benchmark. Dispatch is sequential and answers app
 
 ### Import your own model
 
-The studio discovers locally installed Ollama models. For a custom GGUF text-generation model supported by Ollama, put its GGUF file and a file named `Modelfile` in the same directory. For example:
+In Prompt lab or Benchmark choose **Add model**. The dialog offers three ways to add a candidate:
 
-```text
-FROM ./my-model.gguf
-```
+- **Upload a file.** Drop a `.gguf` file, check the suggested name and choose **Import model**. The studio checks that the file is GGUF, stages it under `~/.modelroi/uploads`, hands it to Ollama's blob store and registers it as `modelroi/<name>`. The staged copy is deleted as soon as Ollama has it, so the import needs free disk space of about twice the file size for a short time. Optional system instructions are stored with the model.
+- **Download by name.** Enter a tag from the Ollama library (for example `llama3.2:1b`) or a GGUF repository on Hugging Face written as `hf.co/user/repo:quantization`. Ollama performs the download and the studio shows its progress. Cancelling keeps the partial download, which resumes next time.
+- **Customize installed.** Pick an installed base model, name the new responder and give it system instructions. This configures behavior without training new weights.
 
-From that directory, run `ollama create my-model-v1 -f Modelfile` and test it with `ollama run my-model-v1`. Open the studio, choose **Models → Refresh model status**, then select the tag alongside your comparison models. Use an inference-ready chat model sized for your computer. [Ollama model import guide](https://docs.ollama.com/import)
+An existing name is never overwritten; use a new version name to compare revisions. **Your models** at the bottom of the dialog lists every model you added, with its size and quantization, and can delete it from Ollama. Built-in candidates and the judge cannot be removed there. Models that support a reasoning phase are run with it switched off, like the built-in candidates, so the answer is not cut short.
 
-Alternatively, **Deploy model** creates a new Ollama tag from installed weights and custom system instructions. This configures model behavior without training new weights. An existing deployment name is protected from overwrite. Use a new version name to compare revisions. The Ollama service owns the weights; your repository and SQLite store no weights or deployment credentials.
+Only GGUF text-generation models are supported. Convert PyTorch, Transformers or MLX weights to GGUF first, for example with llama.cpp's `convert_hf_to_gguf.py`. LoRA adapters and Safetensors directories are not imported by the studio; use the command line for those. [Ollama model import guide](https://docs.ollama.com/import)
+
+You can still import from a terminal. Put the GGUF file and a file named `Modelfile` containing `FROM ./my-model.gguf` in one directory, run `ollama create my-model-v1 -f Modelfile`, then choose **Models → Refresh model status** in the studio. The Ollama service owns the weights; your repository and SQLite store no weights or credentials.
 
 In Local mode, Ollama performs generation and judging. In Hosted mode, user models still generate on your computer, while Groq receives their answers and relevant context for grading. A comparison can contain at most five candidates. A full selection requires deselecting a responder before adding another.

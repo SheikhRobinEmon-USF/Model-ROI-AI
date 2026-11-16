@@ -1,6 +1,6 @@
 import json
 import os
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 models=[dict(id=m,name=n,installed=True) for m,n in [('qwen3:4b','Qwen3 4B'),('gemma4:e4b','Gemma 4 E4B')]]
 remote=[dict(id=n,name=n,provider=n,installed=True,judge_ready=True) for n in ("Google","Groq","OpenRouter","Mistral","Cloudflare")]
 with sync_playwright() as pw:
@@ -69,12 +69,44 @@ with sync_playwright() as pw:
         assert p.locator('.response').count()==1
         assert p.locator('.response strong').first.inner_text()=='Cloudflare'
         assert p.evaluate('document.documentElement.scrollWidth <= innerWidth')
-        p.get_by_role('button',name='Deploy model',exact=True).click()
-        form=p.get_by_role('dialog',name='Deploy a model')
-        form.get_by_label('Model name').fill('analyst-v1')
+        # Add a model: customize an installed one, then upload a file, then download by name.
+        p.get_by_role('button',name='Add model',exact=True).click()
+        form=p.get_by_role('dialog',name='Add a model')
+        form.get_by_role('tab',name='Customize installed').click()
+        form.get_by_label('Model name').fill('Analyst V1')
         form.get_by_label('Model instructions').fill('Explain all assumptions.')
-        assert form.get_by_role('button',name='Deploy to Ollama').is_enabled()
+        assert form.get_by_role('button',name='Create model').is_disabled()
+        form.get_by_label('Model name').fill('analyst-v1')
+        assert form.get_by_role('button',name='Create model').is_enabled()
+        form.get_by_role('tab',name='Upload a file').click()
+        picker=form.get_by_label('Model file')
+        picker.set_input_files(dict(name='notes.gguf',mimeType='application/octet-stream',buffer=b'not a model'))
+        form.get_by_text('notes.gguf is not a GGUF model file.').wait_for()
+        assert form.get_by_role('button',name='Import model').is_disabled()
+        picker.set_input_files(dict(name='My Tuned.v2.gguf',mimeType='application/octet-stream',buffer=b'GGUF'+bytes(256)))
+        expect(form.get_by_label('Model name')).to_have_value('my-tuned-v2')
+        mine=dict(id='ollama/modelroi/my-tuned-v2:latest',name='modelroi/my-tuned-v2:latest',label='my-tuned-v2',custom=True,installed=True,size=260,quantization='Q4_K_M')
+        p.route('**/studio/models/upload*',lambda r:r.fulfill(json=dict(digest='sha256:'+'a'*64,size=260,file='My Tuned.v2.gguf')))
+        def register(route):
+            assert route.request.post_data_json==dict(name='my-tuned-v2',digest='sha256:'+'a'*64,file='My Tuned.v2.gguf',instructions='')
+            p.route('**/studio/models',lambda r:r.fulfill(json=models+remote+[mine]))
+            route.fulfill(json=dict(id=mine['id'],name=mine['name']))
+        p.route('**/studio/models/import',register)
+        form.get_by_role('button',name='Import model').click()
+        p.get_by_role('status').filter(has_text='my-tuned-v2 is ready').wait_for()
+        assert not form.is_visible()
+        p.get_by_role('button',name='Add model',exact=True).click()
+        form.get_by_role('tab',name='Download by name').click()
+        p.route('**/studio/live/models/pull',lambda r:r.fulfill(content_type='application/x-ndjson',
+                body=json.dumps(dict(event='progress',status='pulling abc',completed=5,total=10))+'\n'+json.dumps(dict(event='error',message='Ollama could not download that model: not found'))+'\n'))
+        form.get_by_label('Model reference').fill('hf.co/me/missing:Q4_K_M')
+        form.get_by_role('button',name='Download model').click()
+        assert 'not found' in form.get_by_role('alert').inner_text()
+        assert form.get_by_role('button',name='Remove my-tuned-v2').count()==1
+        assert p.evaluate('document.documentElement.scrollWidth <= innerWidth')
         form.get_by_role('button',name='Cancel').click()
+        p.unroute('**/studio/models')
+        p.route('**/studio/models',lambda r:r.fulfill(json=models+remote))
         assert not errors,errors
         print('Browser verified at',width)
         p.close()

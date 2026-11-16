@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChartColumn, Cloud, CornerDownLeft, Cpu, FlaskConical, History, MessageSquare, MessagesSquare, Moon, Plus, RefreshCw, Rocket, Search, Sun, Trophy } from '@lucide/svelte'
+  import { ChartColumn, Cloud, Download, Upload, CornerDownLeft, Cpu, FlaskConical, History, MessageSquare, MessagesSquare, Moon, Plus, RefreshCw, Rocket, Search, Sun, Trophy } from '@lucide/svelte'
   import { fade, scale } from 'svelte/transition'
   import { studio, type Page } from '../lib/studio.svelte'
   import { pop, quick } from '../lib/motion'
@@ -16,7 +16,9 @@
     { id: 'history', label: 'Go to History', group: 'Navigate', icon: History, run: go('History') },
     { id: 'mode', label: studio.mode === 'local' ? 'Switch to hosted models' : 'Switch to local models', group: 'Actions', icon: studio.mode === 'local' ? Cloud : Cpu, run: () => studio.switchMode(studio.mode === 'local' ? 'hosted' : 'local') },
     { id: 'theme', label: studio.theme === 'dark' ? 'Use light theme' : 'Use dark theme', group: 'Actions', icon: studio.theme === 'dark' ? Sun : Moon, run: () => studio.setTheme(studio.theme === 'dark' ? 'light' : 'dark') },
-    { id: 'deploy', label: 'Deploy a model to Ollama', group: 'Actions', icon: Rocket, run: studio.openDeployment },
+    { id: 'upload', label: 'Add a model: upload a GGUF file', group: 'Actions', icon: Upload, run: () => studio.openAddModel('upload') },
+    { id: 'pull', label: 'Add a model: download by name', group: 'Actions', icon: Download, run: () => studio.openAddModel('pull') },
+    { id: 'customize', label: 'Add a model: customize an installed model', group: 'Actions', icon: Rocket, run: () => studio.openAddModel('customize') },
     { id: 'refresh', label: 'Refresh model status', group: 'Actions', icon: RefreshCw, run: () => void studio.refresh() },
     { id: 'trends', label: 'Analyze saved benchmarks', group: 'Actions', icon: ChartColumn, run: async () => { await studio.nav('History'); await studio.loadAnalytics() } },
     ...studio.chats.map((chat) => ({ id: chat.run_id, label: chat.title, group: 'Chats', icon: MessageSquare, run: () => void studio.openChat(chat.run_id) })),

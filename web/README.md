@@ -28,6 +28,8 @@ root; every figure on screen comes from that API.
 - **Honest progress.** The stage bar (prepare, generate, grade, save) follows events from the
   server and never estimates completion.
 - **A colour per model.** Each model keeps the same hue across answers, leaderboards and charts.
+- **Bring your own model.** Upload a GGUF file with step-by-step progress, download by name with a
+  live byte count, or customize an installed model; manage and remove them in the same dialog.
 - **Chats that stay organised.** Pin, rename, filter and delete conversations from the sidebar.
 - **Works on a phone.** Bottom tab bar, slide-in chat drawer, and no horizontal scrolling down to
   320 px.
@@ -106,7 +108,7 @@ src/
     History.svelte        trends table and searchable run list
     ChatList.svelte       sidebar conversations with rename, pin and delete
     CommandPalette.svelte keyboard command menu
-    DeployDialog.svelte   deploy a local Ollama responder
+    AddModelDialog.svelte upload, download or customize your own model
     RunProgress.svelte    live stage indicator
     ScoreRing.svelte, Rubric.svelte, SplitRating.svelte, ModeSwitch.svelte, RoutingNote.svelte
 check_browser.py          responsive behaviour checks

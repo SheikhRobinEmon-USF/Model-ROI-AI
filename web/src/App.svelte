@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FlaskConical, History as HistoryIcon, MessagesSquare, Moon, PanelLeft, Plus, Search, Sun, TriangleAlert, Trophy, X } from '@lucide/svelte'
+  import { CircleCheck, FlaskConical, History as HistoryIcon, MessagesSquare, Moon, PanelLeft, Plus, Search, Sun, TriangleAlert, Trophy, X } from '@lucide/svelte'
   import { onMount } from 'svelte'
   import { fade, fly, slide } from 'svelte/transition'
   import { PAGES, studio, type Page } from './lib/studio.svelte'
@@ -7,7 +7,7 @@
   import Benchmark from './components/Benchmark.svelte'
   import ChatList from './components/ChatList.svelte'
   import CommandPalette from './components/CommandPalette.svelte'
-  import DeployDialog from './components/DeployDialog.svelte'
+  import AddModelDialog from './components/AddModelDialog.svelte'
   import History from './components/History.svelte'
   import PromptLab from './components/PromptLab.svelte'
   import Results from './components/Results.svelte'
@@ -85,11 +85,20 @@
     </header>
 
     <RunProgress />
-    {#if studio.error && !studio.deployOpen}
+    {#if studio.error && !studio.addOpen}
       <div class="mx-auto w-full max-w-[1100px] px-4 pt-3 md:px-8" transition:slide={quick}>
         <div class="flex items-start gap-2.5 rounded-2xl border border-bad/30 bg-bad-soft px-4 py-2.5 text-sm text-bad">
           <TriangleAlert size={16} class="mt-0.5 shrink-0" aria-hidden="true" /><p role="alert" class="alert min-w-0 flex-1">{studio.error}</p>
           <button class="btn btn-ghost btn-sm btn-icon -my-1 !text-bad" aria-label="Dismiss" onclick={() => (studio.error = '')}><X size={14} aria-hidden="true" /></button>
+        </div>
+      </div>
+    {/if}
+
+    {#if studio.notice}
+      <div class="mx-auto w-full max-w-[1100px] px-4 pt-3 md:px-8" transition:slide={quick}>
+        <div class="flex items-start gap-2.5 rounded-2xl border border-accent-text/30 bg-accent-soft px-4 py-2.5 text-sm">
+          <CircleCheck size={16} class="mt-0.5 shrink-0 text-accent-text" aria-hidden="true" /><p role="status" class="min-w-0 flex-1 break-words">{studio.notice}</p>
+          <button class="btn btn-ghost btn-sm btn-icon -my-1" aria-label="Dismiss message" onclick={() => (studio.notice = '')}><X size={14} aria-hidden="true" /></button>
         </div>
       </div>
     {/if}
@@ -136,4 +145,4 @@
 {/if}
 
 <CommandPalette />
-<DeployDialog />
+<AddModelDialog />

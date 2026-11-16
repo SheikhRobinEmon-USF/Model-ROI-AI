@@ -1,7 +1,10 @@
 /** Single source of truth for the studio. Components read and call into this. */
 import { tick } from 'svelte'
 
-export type Model = { id: string; name: string; installed: boolean; provider?: string; custom?: boolean; judge_ready?: boolean }
+export type Model = { id: string; name: string; installed: boolean; provider?: string; custom?: boolean; judge_ready?: boolean; label?: string; size?: number | null; family?: string | null; parameters?: string | null; quantization?: string | null; created_here?: boolean }
+export type AddTab = 'upload' | 'pull' | 'customize'
+/** A long-running model import: which numbered step is active and, when known, its byte progress. */
+export type Job = { kind: AddTab; step: number; label: string; loaded: number; total: number }
 export type Mode = 'local' | 'hosted'
 export const PAGES = ['Prompt lab', 'Benchmark', 'Results', 'History'] as const
 export type Page = (typeof PAGES)[number]
@@ -13,8 +16,15 @@ const post = (value: unknown): RequestInit => ({ method: 'POST', headers: { 'Con
 async function api(path: string, init?: RequestInit) {
   const response = await fetch('/studio/' + path, init)
   const value = await response.json()
-  if (!response.ok) throw Error(typeof value.detail === 'string' ? value.detail : 'Check your inputs and try again.')
+  if (!response.ok) throw Error(detailOf(value))
   return value
+}
+
+/** FastAPI sends a string for raised errors and a list for validation errors. */
+function detailOf(value: any) {
+  if (typeof value?.detail === 'string') return value.detail
+  const first = Array.isArray(value?.detail) ? value.detail[0]?.msg : ''
+  return typeof first === 'string' && first.startsWith('Value error, ') ? first.slice(13) : 'Check your inputs and try again.'
 }
 
 function stored(key: string) {
@@ -35,6 +45,7 @@ class Studio {
 
   busy = $state('')
   error = $state('')
+  notice = $state('')
   phase = $state('')
   visited = $state<string[]>([])
   elapsed = $state(0)
@@ -65,14 +76,20 @@ class Studio {
 
   chatMenu = $state(false)
   paletteOpen = $state(false)
-  deployOpen = $state(false)
+  addOpen = $state(false)
+  addTab = $state<AddTab>('upload')
+  job = $state<Job | null>(null)
   deployName = $state('')
   deployBase = $state('')
   instructions = $state('')
 
   feed: HTMLElement | undefined
+  private abort: (() => void) | undefined
+  private cancelled = false
+  private noticeTimer: ReturnType<typeof setTimeout> | undefined
   editor: HTMLTextAreaElement | undefined
 
+  ownModels = $derived(this.models.filter((m) => m.custom))
   visibleModels = $derived(this.models.filter((m) => (this.mode === 'hosted' ? !!m.provider || m.custom : !m.provider)))
   readyCount = $derived(this.visibleModels.filter((m) => m.installed).length)
   runs = $derived<any[]>(this.report?.runs ?? (this.report?.results ? [this.report] : []))
@@ -98,7 +115,7 @@ class Studio {
       .sort((a, b) => Number(b.pinned) - Number(a.pinned))
   })
 
-  name = (id: string) => this.models.find((m) => m.id === id)?.name ?? id
+  name = (id: string) => { const m = this.models.find((m) => m.id === id); return m?.label ?? m?.name ?? id.replace(/^ollama\/(modelroi\/)?/, '') }
 
   /** Stable colour slot per model so a model keeps its hue across every view. */
   hue = (id: string, fallback = 0) => {
@@ -230,16 +247,100 @@ class Studio {
     })
   }
 
-  openDeployment = () => {
-    this.deployBase = this.models.find((m) => !m.provider && m.installed)?.id ?? ''
-    this.deployOpen = true
+  say = (message: string) => {
+    this.notice = message
+    clearTimeout(this.noticeTimer)
+    this.noticeTimer = setTimeout(() => (this.notice = ''), 7000)
   }
 
-  deploy = () => this.action('Deploying model to Ollama', async () => {
-    const model = await api('models/deploy', post({ name: this.deployName, base: this.deployBase.replace(/^ollama\//, ''), instructions: this.instructions }))
+  openAddModel = (tab: AddTab = 'upload') => {
+    this.deployBase = this.models.find((m) => !m.provider && m.installed)?.id ?? ''
+    this.addTab = tab; this.error = ''; this.addOpen = true
+  }
+
+  /** Refresh the list, add the new model to the comparison when there is room, and confirm. */
+  private adopt = async (model: { id: string; name: string }) => {
     this.models = await api('models')
-    if (this.selected.length < MAX_MODELS && !this.selected.includes(model.id)) this.selected = [...this.selected, model.id]
-    this.deployName = ''; this.instructions = ''; this.deployOpen = false
+    const room = this.selected.length < MAX_MODELS
+    if (room && !this.selected.includes(model.id)) this.selected = [...this.selected, model.id]
+    this.addOpen = false
+    const label = this.name(model.id)
+    this.say(room ? `${label} is ready and selected for comparison.` : `${label} is ready. Deselect a model to add it to the comparison.`)
+  }
+
+  /** Runs one import, keeping `job` in step with it and treating a user cancel as a quiet stop. */
+  private importing = (label: string, first: Job, work: () => Promise<void>) => this.action(label, async () => {
+    this.cancelled = false; this.job = first
+    try { await work() } catch (e) { if (!this.cancelled) throw e } finally { this.job = null; this.abort = undefined }
+  })
+
+  cancelJob = () => { this.cancelled = true; this.abort?.() }
+
+  deploy = () => this.importing('Creating model in Ollama', { kind: 'customize', step: 0, label: 'Creating model in Ollama', loaded: 0, total: 0 }, async () => {
+    const model = await api('models/deploy', post({ name: this.deployName, base: this.deployBase.replace(/^ollama\//, ''), instructions: this.instructions }))
+    this.deployName = ''; this.instructions = ''
+    await this.adopt(model)
+  })
+
+  private upload = (file: File) => new Promise<{ digest: string; file: string }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    this.abort = () => xhr.abort()
+    xhr.open('POST', '/studio/models/upload?name=' + encodeURIComponent(file.name))
+    xhr.upload.onprogress = (e) => { if (this.job) this.job = { ...this.job, loaded: e.loaded, total: e.total || file.size } }
+    // The bytes have left the browser; the server is now hashing and copying them into Ollama.
+    xhr.upload.onload = () => { this.abort = undefined; if (this.job) this.job = { ...this.job, step: 1, label: 'Verifying and copying into Ollama', loaded: file.size, total: file.size } }
+    xhr.onload = () => {
+      let value: any = null
+      try { value = JSON.parse(xhr.responseText) } catch {}
+      if (xhr.status >= 200 && xhr.status < 300 && value?.digest) resolve(value)
+      else reject(Error(value ? detailOf(value) : 'The upload was interrupted. Try again.'))
+    }
+    xhr.onerror = () => reject(Error('The upload was interrupted. Check that the studio is still running, then try again.'))
+    xhr.onabort = () => reject(Error('Upload cancelled.'))
+    xhr.send(file)
+  })
+
+  importFile = (file: File, name: string, instructions: string) => this.importing('Importing ' + file.name, { kind: 'upload', step: 0, label: 'Uploading', loaded: 0, total: file.size }, async () => {
+    const blob = await this.upload(file)
+    this.job = { kind: 'upload', step: 2, label: 'Registering with Ollama', loaded: 0, total: 0 }
+    await this.adopt(await api('models/import', post({ name, digest: blob.digest, file: blob.file, instructions })))
+  })
+
+  pullModel = (reference: string) => this.importing('Downloading ' + reference, { kind: 'pull', step: 0, label: 'Contacting the registry', loaded: 0, total: 0 }, async () => {
+    const controller = new AbortController()
+    this.abort = () => controller.abort()
+    const response = await fetch('/studio/live/models/pull', { ...post({ model: reference }), signal: controller.signal })
+    if (!response.ok || !response.body) throw Error(detailOf(await response.json().catch(() => null)))
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    const layers = new Map<string, [number, number]>()
+    let buffer = '', model: { id: string; name: string } | null = null
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += value
+      let end
+      while ((end = buffer.indexOf('\n')) >= 0) {
+        const event = JSON.parse(buffer.slice(0, end)); buffer = buffer.slice(end + 1)
+        if (event.event === 'error') throw Error(event.message)
+        if (event.event === 'complete') model = event.model
+        if (event.event === 'progress') {
+          // Ollama reports each layer separately; sum them so the bar never runs backwards.
+          if (event.total) layers.set(event.status, [event.completed ?? 0, event.total])
+          let loaded = 0, total = 0
+          for (const [done, size] of layers.values()) { loaded += done; total += size }
+          this.job = { kind: 'pull', step: 0, label: event.total ? 'Downloading' : event.status.replace(/^./, (c: string) => c.toUpperCase()), loaded, total }
+        }
+      }
+    }
+    if (!model) throw Error('The download ended early. Start it again to resume.')
+    await this.adopt(model)
+  })
+
+  removeModel = (model: Model) => this.action('Removing ' + (model.label ?? model.name), async () => {
+    await api('models/remove', post({ id: model.id }))
+    this.models = await api('models')
+    this.selected = this.selected.filter((id) => id !== model.id)
+    this.say((model.label ?? model.name) + ' was removed from Ollama.')
   })
 
   download = () => {

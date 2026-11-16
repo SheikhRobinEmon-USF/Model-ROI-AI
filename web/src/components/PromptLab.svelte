@@ -62,7 +62,7 @@
           <label class="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent-soft has-disabled:opacity-55">
             <input class="check" type="checkbox" value={m.id} bind:group={studio.selected} disabled={!!studio.busy || !m.installed || (studio.selected.length >= MAX_MODELS && !studio.selected.includes(m.id))} />
             <span class="min-w-0 flex-1">
-              <span class="flex items-center gap-2 text-sm font-medium"><i class="dot hue-{studio.hue(m.id)}" aria-hidden="true"></i><span class="truncate">{m.name}</span></span>
+              <span class="flex items-center gap-2 text-sm font-medium"><i class="dot hue-{studio.hue(m.id)}" aria-hidden="true"></i><span class="truncate">{m.label ?? m.name}</span></span>
               <small class="mt-0.5 block truncate text-xs text-faint">{m.custom ? 'Your model · Ollama' : (m.provider ?? 'Ollama')} · {m.installed ? 'Ready' : m.provider ? 'Setup needed' : 'ollama pull ' + m.id}</small>
             </span>
           </label>

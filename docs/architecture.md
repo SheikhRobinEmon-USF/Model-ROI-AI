@@ -71,6 +71,12 @@ query and closed afterwards.
 one environment variable. There is no fallback to a different or paid model, and keys stay on the
 server.
 
+**Your own weights go through Ollama, not around it.** An uploaded GGUF file is streamed to disk
+while its SHA-256 is computed, pushed to Ollama's blob store under that digest and registered with
+`/api/create`. The studio never loads weights itself, so an imported model runs exactly like a
+built-in one. Downloads by name relay Ollama's own pull progress, and closing the connection
+cancels the pull.
+
 ## Request flow for a prompt comparison
 
 1. The studio posts the prompt, selected models, optional reference answer and the previous turn's
@@ -89,7 +95,7 @@ server.
 | `web/src/lib/studio.svelte.ts` | All studio state and API calls |
 | `web/src/components/` | Views: prompt lab, benchmark, results, history, command palette |
 | `src/modelroi/api/studio.py` | `/studio` routes, streaming, benchmark orchestration |
-| `src/modelroi/providers/` | Ollama client, hosted routes, user-deployed models |
+| `src/modelroi/providers/` | Ollama client, hosted routes, user-added models |
 | `src/modelroi/graders/` | Exact checks and judge grading |
 | `src/modelroi/execution/` | Benchmark runner, run scope, budget ledger (not yet wired to a provider runner) |
 | `src/modelroi/evaluation_policy.py` | Thresholds and weighted ranking |

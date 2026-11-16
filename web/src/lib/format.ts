@@ -1,6 +1,14 @@
 export const seconds = (ms: number | null | undefined) =>
   typeof ms === 'number' && Number.isFinite(ms) ? (ms / 1000).toFixed(2) + ' s' : 'Unavailable'
 
+export function bytes(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let index = 0
+  while (value >= 1000 && index < units.length - 1) { value /= 1000; index++ }
+  return (index && value < 100 ? value.toFixed(1) : Math.round(value)) + ' ' + units[index]
+}
+
 export const percent = (value: number, digits = 0) => (100 * value).toFixed(digits) + '%'
 
 export const words = (key: string) => key.replaceAll('_', ' ')

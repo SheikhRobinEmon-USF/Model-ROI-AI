@@ -27,8 +27,9 @@ interface, not measured model results.
   Holm-adjusted p-values, token counts and timings, plus JSON export.
 - **History and trends.** Every run is saved locally in SQLite. DuckDB pools pass rates, mean grades
   and median latency across saved benchmarks.
-- **Your own models.** Deploy a local Ollama responder with its own system instructions, or import
-  your own weights, and test it beside the built-in candidates.
+- **Your own models.** Upload a GGUF file, download a model by name from the Ollama library or
+  Hugging Face, or give an installed model its own instructions. It becomes a candidate beside the
+  built-in models, and you can remove it again from the same dialog.
 
 ## Interfaces
 
@@ -64,7 +65,7 @@ See [docs/architecture.md](docs/architecture.md) for the design and
 
 | Role | Local mode (Ollama) | Hosted mode |
 |---|---|---|
-| Responders | `qwen3:4b`, `gemma4:e4b`, plus any model you deploy or import | Gemini Flash-Lite, Qwen 3.8 27B, Gemma 4 26B, Mistral Small, Llama 3.3 70B |
+| Responders | `qwen3:4b`, `gemma4:e4b`, plus any model you add | Gemini Flash-Lite, Qwen 3.8 27B, Gemma 4 26B, Mistral Small, Llama 3.3 70B |
 | Judge and summaries | `gpt-oss:20b` | GPT-OSS 120B served by Groq |
 | Models per run | Up to 5 | Up to 5 |
 
@@ -109,6 +110,22 @@ This starts the mock API on http://localhost:8000 and the Streamlit preview on
 http://localhost:8501. Local model inference is not wired into the containers; use the launcher
 above for real runs.
 
+## Test your own model
+
+![Add a model](docs/images/web_add_model.png)
+
+Choose **Add model** in Prompt lab or Benchmark. There are three ways in:
+
+| Option | Use it when | What happens |
+|---|---|---|
+| Upload a file | You have your own weights as a `.gguf` file | The studio verifies the file, hands it to Ollama and registers it as `modelroi/<name>` |
+| Download by name | The model is in the Ollama library or a GGUF repository on Hugging Face (`hf.co/user/repo:quantization`) | Ollama downloads it, with progress and resumable cancel |
+| Customize installed | You want the same weights with different system instructions | Ollama creates a new tag from an installed base |
+
+The new model is selected for the next comparison automatically. Uploading needs free disk space of
+about twice the file size until Ollama has copied the file. Weights trained with PyTorch, MLX or
+Transformers must be converted to GGUF first; see [docs/setup.md](docs/setup.md#import-your-own-model).
+
 ## Screens
 
 | Benchmark results | Benchmark setup |
@@ -148,7 +165,7 @@ Remaining release gates:
 web/           Svelte 5 studio (see web/README.md)
 src/modelroi/
   api/         FastAPI service and the /studio routes
-  providers/   Ollama client, hosted provider routes, user-deployed models
+  providers/   Ollama client, hosted provider routes, user-added models
   graders/     exact-match checks and judge-model quality grading
   execution/   benchmark runner, run-scoped progress events, budget ledger
   datasets/    case validation, analytical challenges, document excerpts

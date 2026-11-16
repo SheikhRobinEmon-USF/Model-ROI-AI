@@ -53,8 +53,8 @@
         {@const on = studio.selected.includes(m.id)}
         <label class="model hue-{studio.hue(m.id)} flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors has-disabled:opacity-55 {on ? 'border-(--hue) bg-accent-soft' : 'border-line hover:border-line-strong'}">
           <i class="dot" aria-hidden="true"></i>
-          <span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">{m.name}</span>
-            <code class="num block truncate text-[11.5px] text-faint">{m.installed ? m.id : m.provider ? 'Configure ' + m.provider + ' credentials' : 'ollama pull ' + m.id}</code></span>
+          <span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">{m.label ?? m.name}</span>
+            <code class="num block truncate text-[11.5px] text-faint">{m.installed ? m.id.replace(/^ollama\//, '') : m.provider ? 'Configure ' + m.provider + ' credentials' : 'ollama pull ' + m.id}</code></span>
           <input class="check" type="checkbox" value={m.id} bind:group={studio.selected} disabled={!!studio.busy || !m.installed || (studio.selected.length >= MAX_MODELS && !on)} />
         </label>
       {:else}

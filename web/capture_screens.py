@@ -17,7 +17,9 @@ URL = os.getenv("MODELROI_URL", "http://127.0.0.1:8598/")
 OUT = Path(__file__).resolve().parents[1] / "docs" / "images"
 now = datetime.now(timezone.utc)
 
-MODELS = [dict(id="qwen3:4b", name="Qwen3 4B", installed=True), dict(id="gemma4:e4b", name="Gemma 4 E4B", installed=True)]
+MODELS = [dict(id="qwen3:4b", name="Qwen3 4B", installed=True), dict(id="gemma4:e4b", name="Gemma 4 E4B", installed=True),
+          dict(id="ollama/modelroi/support-analyst-v1:latest", name="modelroi/support-analyst-v1:latest", label="support-analyst-v1", custom=True,
+               installed=True, size=2_490_000_000, parameters="3.9B", quantization="Q4_K_M", created_here=True)]
 PROMPT = "A clinic's revenue grew 12% to $4.2M while costs rose 9% to $3.1M. What happened to its operating margin?"
 
 
@@ -124,6 +126,13 @@ with sync_playwright() as pw:
     p.get_by_text("Provisional ranking").wait_for()
     p.locator("main").evaluate("m => m.scrollTo(0, 150)")
     shot(p, "results")
+
+    p.get_by_role("button", name="Prompt lab").click()
+    p.get_by_role("button", name="Add model", exact=True).click()
+    dialog = p.get_by_role("dialog", name="Add a model")
+    dialog.get_by_label("Model file").set_input_files(dict(name="support-analyst-v2.Q4_K_M.gguf", mimeType="application/octet-stream", buffer=b"GGUF" + bytes(2_400_000)))
+    dialog.get_by_label("Model name").fill("support-analyst-v2")
+    shot(p, "add_model")
 
     p = page(browser, "light")
     ask(p)
