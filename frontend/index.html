@@ -1,1 +1,22 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f8f8f4"><title>ModelROI · Evaluation studio</title></head><body style="margin:0"><div id="app"></div><script type="module" src="/src.ts"></script></body></html>
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0f0d" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23c0ea7d'/%3E%3Cpath d='M7 12q4.500-4 9 0t9 0M7 20q4.500-4 9 0t9 0' fill='none' stroke='%23103a33' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <title>ModelROI · Evaluation studio</title>
+    <script>
+      try {
+        var t = localStorage.getItem('modelroi-theme')
+        if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+        document.documentElement.dataset.theme = t
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
