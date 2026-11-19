@@ -8,7 +8,7 @@ import urllib.request
 import time
 
 root = Path(__file__).resolve().parents[1]
-python = root / ".venv/bin/python"
+python = root / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
 tunnel = shutil.which("cloudflared")
 if not tunnel:
     raise SystemExit("Install the tunnel client first: brew install cloudflared")

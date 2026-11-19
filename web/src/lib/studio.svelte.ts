@@ -13,18 +13,36 @@ export const MAX_MODELS = 5
 
 const post = (value: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) })
 
+/** The server's JSON body, or null when it sent something else (a proxy page, a crash, an empty reply). */
+async function body(response: Response) {
+  try { return await response.json() } catch { return null }
+}
+
+async function failure(response: Response) {
+  const value = await body(response)
+  if (value) return Error(detailOf(value))
+  return Error(response.status >= 500 ? `The studio server hit an error (HTTP ${response.status}). Check the terminal running the launcher.` : 'Check your inputs and try again.')
+}
+
 async function api(path: string, init?: RequestInit) {
-  const response = await fetch('/studio/' + path, init)
-  const value = await response.json()
-  if (!response.ok) throw Error(detailOf(value))
+  let response: Response
+  try { response = await fetch('/studio/' + path, init) } catch { throw Error(OFFLINE) }
+  if (!response.ok) throw await failure(response)
+  const value = await body(response)
+  if (value === null) throw Error('The studio server sent an unreadable reply. Reload the page and try again.')
   return value
 }
 
-/** FastAPI sends a string for raised errors and a list for validation errors. */
+const OFFLINE = 'The studio server is not responding. Check that the launcher is still running in your terminal, then reload.'
+
+/** FastAPI sends a string for raised errors and a list of field problems for invalid input. */
 function detailOf(value: any) {
   if (typeof value?.detail === 'string') return value.detail
-  const first = Array.isArray(value?.detail) ? value.detail[0]?.msg : ''
-  return typeof first === 'string' && first.startsWith('Value error, ') ? first.slice(13) : 'Check your inputs and try again.'
+  const first = Array.isArray(value?.detail) ? value.detail[0] : null
+  if (typeof first?.msg !== 'string') return 'Check your inputs and try again.'
+  if (first.msg.startsWith('Value error, ')) return first.msg.slice(13)
+  const field = Array.isArray(first.loc) ? first.loc.filter((part: unknown) => typeof part === 'string' && part !== 'body').join(' ').replaceAll('_', ' ') : ''
+  return (field ? field.replace(/^./, (c: string) => c.toUpperCase()) + ': ' : '') + first.msg.replace(/^./, (c: string) => c.toLowerCase()) + '.'
 }
 
 function stored(key: string) {
@@ -96,6 +114,15 @@ class Studio {
   activeChat = $derived(this.turns.at(-1)?.run_id as string | undefined)
   maxCases = $derived(this.suite === 'standard' ? 50 : 6)
   countValid = $derived(Number.isInteger(this.count) && this.count >= 1 && this.count <= this.maxCases)
+  /** The first threshold the server would reject, in words, or '' when all are valid. */
+  gateProblem = $derived.by(() => {
+    const percent = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100
+    if (!percent(this.minSuccess)) return 'Minimum task success must be a whole number from 0 to 100.'
+    if (!percent(this.minSchema)) return 'Minimum schema compliance must be a whole number from 0 to 100.'
+    const limit = this.maxLatency as unknown
+    if (limit != null && limit !== '' && !(typeof limit === 'number' && Number.isFinite(limit) && limit > 0)) return 'Maximum p95 time must be more than 0 seconds, or empty for no limit.'
+    return ''
+  })
 
   /** One entry per conversation: the latest turn, titled and pinned from its thread. */
   chats = $derived.by(() => {
@@ -156,15 +183,29 @@ class Studio {
     else if (this.selected.length < MAX_MODELS) this.selected = [...this.selected, id]
   }
 
+  /** Keep the current choice where those models are still usable; fall back to the defaults otherwise. */
+  private keepSelection = (preferred: string[]) => {
+    const usable = new Set(this.models.filter((m) => m.installed && (this.mode === 'hosted' ? !!m.provider || m.custom : !m.provider)).map((m) => m.id))
+    const kept = preferred.filter((id) => usable.has(id)).slice(0, MAX_MODELS)
+    if (kept.length) this.selected = kept
+    else this.switchMode(this.mode)
+  }
+
   refresh = () => this.action('Checking model availability', async () => {
-    this.models = await api('models'); this.loaded = true; this.switchMode(this.mode)
+    const before = this.loaded ? [...this.selected] : []
+    this.models = await api('models'); this.loaded = true
+    this.keepSelection(before)
   })
 
   start = async () => {
     await this.refresh()
     await this.action('Loading chat history', async () => { this.history = await api('history') })
     const id = stored('modelroi-chat')
-    if (id) await this.action('Restoring chat', async () => this.resume(await api('history/' + id)))
+    if (!id) return
+    // A chat deleted elsewhere, or a history folder that moved, is not worth an error on startup.
+    await this.action('Restoring chat', async () => {
+      try { await this.resume(await api('history/' + id)) } catch { store('modelroi-chat') }
+    })
   }
 
   nav = async (page: Page) => {
@@ -191,11 +232,14 @@ class Studio {
   resume = async (last: any) => {
     const chain = [last], seen = new Set([last.run_id])
     while (chain[0].parent_id && !seen.has(chain[0].parent_id)) {
-      const prior = await api('history/' + chain[0].parent_id)
+      let prior
+      try { prior = await api('history/' + chain[0].parent_id) } catch { break } // Show what survives of the thread.
       seen.add(prior.run_id); chain.unshift(prior)
     }
     this.newChat()
-    this.switchMode(last.judge_model === 'openai/gpt-oss-120b' ? 'hosted' : 'local')
+    this.mode = last.judge_model === 'openai/gpt-oss-120b' ? 'hosted' : 'local'
+    // Continue with the models this chat used, so follow-ups stay comparable.
+    this.keepSelection((last.answers ?? []).map((a: any) => a.requested_model))
     this.turns = chain; this.report = last
     store('modelroi-chat', last.run_id)
     await this.bottom()
@@ -310,7 +354,8 @@ class Studio {
     const controller = new AbortController()
     this.abort = () => controller.abort()
     const response = await fetch('/studio/live/models/pull', { ...post({ model: reference }), signal: controller.signal })
-    if (!response.ok || !response.body) throw Error(detailOf(await response.json().catch(() => null)))
+    if (!response.ok) throw await failure(response)
+    if (!response.body) throw Error('The download could not start.')
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
     const layers = new Map<string, [number, number]>()
     let buffer = '', model: { id: string; name: string } | null = null
@@ -360,13 +405,15 @@ class Studio {
       const selected = [...this.selected]
       const payload = isPrompt
         ? { models: selected, hosted_judge: hosted, prompt: input, long_context: hosted && this.longContext, reference_answer: this.reference.trim(), parent_id: this.activeChat ?? null }
-        : { models: selected, hosted_judge: hosted, suite: this.suite, count: this.count, category: this.category, gates: { min_success: this.minSuccess, min_schema: this.minSchema, max_p95_seconds: this.maxLatency ?? null } }
+        : { models: selected, hosted_judge: hosted, suite: this.suite, count: this.count, category: this.category, gates: { min_success: this.minSuccess, min_schema: this.minSchema, max_p95_seconds: typeof this.maxLatency === 'number' ? this.maxLatency : null } }
       const turnIndex = this.turns.length, draft = this.prompt
       const partial: any = { prompt: input, answers: [], started_at: new Date().toISOString() }
       if (isPrompt) { this.turns = [...this.turns, partial]; this.pending = selected; this.copied = null; this.prompt = ''; await this.bottom() }
       try {
-        const response = await fetch('/studio/live/' + (isPrompt ? 'prompt' : 'benchmark'), post(payload))
-        if (!response.ok || !response.body) throw Error('Could not start evaluation.')
+        let response: Response
+        try { response = await fetch('/studio/live/' + (isPrompt ? 'prompt' : 'benchmark'), post(payload)) } catch { throw Error(OFFLINE) }
+        if (!response.ok) throw await failure(response)
+        if (!response.body) throw Error('Could not start evaluation.')
         const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
         let buffer = '', complete = false
         while (true) {

@@ -19,7 +19,9 @@ reference.
 
 Benchmarks check exact expected values and JSON key and type structure, separately from the judge.
 Exact JSON checks preserve types: numeric `1` does not equal boolean `true`. Exceptions count as
-failed cases, and truncated outputs fail grading.
+failed cases, and truncated outputs fail grading. An answer that is exactly one Markdown code block
+(for example ```` ```json ... ``` ````) is unwrapped before checking and marked `json_fenced` in the
+saved result; any other text around the JSON still fails as invalid.
 
 | Metric | Definition |
 |---|---|

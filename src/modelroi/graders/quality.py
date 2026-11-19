@@ -1,7 +1,9 @@
 """Local answer-quality scoring using gpt-oss-20b."""
 import json
 import re
-from modelroi.providers.local import request
+from urllib.error import HTTPError, URLError
+
+from modelroi.providers.local import ollama_error, request
 
 from modelroi.providers import hosted
 
@@ -35,7 +37,15 @@ def judge_request(path, payload, timeout):
     if payload["model"] == hosted.JUDGE:
         choice, _ = hosted.completion(hosted.JUDGE, payload["messages"], payload["options"]["num_predict"], payload.get("format"))
         return {"done": True, "done_reason": choice.get("finish_reason"), "message": choice["message"]}
-    return request(path, payload, timeout=timeout)
+    try:
+        return request(path, payload, timeout=timeout)
+    except HTTPError as exc:
+        if exc.code == 404:
+            raise ValueError(f"The judge model {payload['model']} is not installed. "
+                             f"In Terminal run: ollama pull {payload['model']}") from None
+        raise ValueError(f"Ollama could not run the judge: {ollama_error(exc) or f'HTTP {exc.code}'}") from None
+    except URLError as exc:
+        raise ValueError("Ollama is not responding. Open the Ollama app, then retry grading.") from exc
 
 
 def rating(question, answer, model=MODEL):

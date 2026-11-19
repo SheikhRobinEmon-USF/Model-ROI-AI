@@ -37,10 +37,11 @@
       <h2 class="flex items-center gap-2 text-lg font-semibold"><SlidersHorizontal size={17} class="text-accent-text" aria-hidden="true" />Ranking thresholds</h2>
       <p class="mb-4 mt-1 text-[13px] text-muted">A model must clear every threshold before it is ranked.</p>
       <div class="grid items-end gap-4 sm:grid-cols-3">
-        <label><span class="label">Minimum task success (%)</span><input class="field num" type="number" min="0" max="100" bind:value={studio.minSuccess} /></label>
-        <label><span class="label">Minimum schema compliance (%)</span><input class="field num" type="number" min="0" max="100" bind:value={studio.minSchema} /></label>
-        <label><span class="label">Maximum p95 time (s, optional)</span><input class="field num" type="number" min="0.01" step="any" placeholder="No limit" bind:value={studio.maxLatency} /></label>
+        <label><span class="label">Minimum task success (%)</span><input class="field num" type="number" min="0" max="100" step="1" bind:value={studio.minSuccess} aria-invalid={studio.gateProblem.startsWith("Minimum task")} /></label>
+        <label><span class="label">Minimum schema compliance (%)</span><input class="field num" type="number" min="0" max="100" step="1" bind:value={studio.minSchema} aria-invalid={studio.gateProblem.startsWith("Minimum schema")} /></label>
+        <label><span class="label">Maximum p95 time (s, optional)</span><input class="field num" type="number" min="0.01" step="any" placeholder="No limit" bind:value={studio.maxLatency} aria-invalid={studio.gateProblem.startsWith("Maximum")} /></label>
       </div>
+      {#if studio.gateProblem}<p class="mt-3 text-[13px] text-bad" role="alert">{studio.gateProblem}</p>{/if}
     </section>
   </fieldset>
 
@@ -63,7 +64,7 @@
     </div>
     <button class="btn btn-ghost btn-sm mt-2" disabled={!!studio.busy} onclick={studio.refresh}><RefreshCw size={13} aria-hidden="true" />Refresh model status</button>
     <div class="mt-4 border-t border-line pt-4">
-      <button class="btn btn-primary h-12 w-full text-[15px]" disabled={!!studio.busy || !studio.selected.length || !studio.countValid} onclick={studio.execute}>Run benchmark<ArrowRight size={16} aria-hidden="true" /></button>
+      <button class="btn btn-primary h-12 w-full text-[15px]" disabled={!!studio.busy || !studio.selected.length || !studio.countValid || !!studio.gateProblem} onclick={studio.execute}>Run benchmark<ArrowRight size={16} aria-hidden="true" /></button>
       <p class="mt-2.5 text-center text-xs text-faint">{#if total}<span class="num">{studio.count} × {studio.selected.length} = {total}</span> generations · {/if}Runs sequentially · {studio.mode === 'local' ? 'Ollama' : 'provider APIs'}</p>
     </div>
   </aside>

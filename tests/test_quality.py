@@ -94,3 +94,19 @@ def test_reference_is_saved_and_only_used_for_grading(tmp_path, monkeypatch):
     candidate.assert_called_once_with("qwen3:4b", "Color?")
     assert "Royal blue" in judge.call_args.args[1]["messages"][1]["content"]
     assert client.get("/studio/history/" + report["run_id"]).json()["reference_answer"] == "Royal blue"
+
+
+def test_missing_or_unreachable_local_judge_explains_the_fix():
+    import io
+    from urllib.error import HTTPError, URLError
+    missing = HTTPError("http://127.0.0.1:11434/api/chat", 404, "Not Found", {}, io.BytesIO(b'{"error":"model not found"}'))
+    with patch("modelroi.graders.quality.request", side_effect=missing):
+        with pytest.raises(ValueError, match="In Terminal run: ollama pull gpt-oss:20b"):
+            rating("Task", "Answer")
+    with patch("modelroi.graders.quality.request", side_effect=URLError("refused")):
+        with pytest.raises(ValueError, match="Ollama is not responding"):
+            rating("Task", "Answer")
+    broken = HTTPError("http://127.0.0.1:11434/api/chat", 500, "Server Error", {}, io.BytesIO(b'{"error":"out of memory"}'))
+    with patch("modelroi.graders.quality.request", side_effect=broken):
+        with pytest.raises(ValueError, match="out of memory"):
+            rating("Task", "Answer")

@@ -1,9 +1,21 @@
 import json
+import re
+
+# One Markdown code block around the whole answer, as small models often add despite "Return only JSON".
+FENCE = re.compile(r"\s*```[A-Za-z0-9_-]*[ \t]*\n(.*?)\n?[ \t]*```\s*", re.DOTALL)
+
+
+def parse(output):
+    """Decode an answer as JSON, unwrapping a single fenced block. Returns (value, fenced)."""
+    if isinstance(output, str) and (match := FENCE.fullmatch(output)):
+        return json.loads(match.group(1)), True
+    return json.loads(output), False
+
 
 def grade(case, output):
     """Explicit types matter: JSON true must not equal numeric 1."""
     try:
-        actual = json.loads(output)
+        actual, fenced = parse(output)
     except (ValueError, TypeError):
         return {'passed':False,'reason':'invalid_json'}
     expected = case.expected
@@ -18,13 +30,16 @@ def grade(case, output):
             return len(a)==len(b) and all(same(x,y) for x,y in zip(a,b))
         return a==b
     passed = same(actual,expected)
-    return {'passed':passed,'reason':'exact_match' if passed else 'field_or_type_mismatch'}
+    result = {'passed':passed,'reason':'exact_match' if passed else 'field_or_type_mismatch'}
+    if fenced:
+        result['json_fenced'] = True
+    return result
 
 
 def structure_metrics(case, output):
     """Check the key/type contract represented by this case's expected JSON."""
     try:
-        actual = json.loads(output)
+        actual, _ = parse(output)
     except (ValueError, TypeError):
         actual = None
     expected = case.expected

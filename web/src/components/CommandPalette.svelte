@@ -4,7 +4,8 @@
   import { studio, type Page } from '../lib/studio.svelte'
   import { pop, quick } from '../lib/motion'
 
-  type Command = { id: string; label: string; group: string; icon: any; hint?: string; run: () => void }
+  /** `anytime` commands are safe during a run; the rest would change the run's models or thread. */
+  type Command = { id: string; label: string; group: string; icon: any; hint?: string; anytime?: boolean; run: () => void }
   let query = $state(''), index = $state(0), list = $state<HTMLElement>()
 
   const go = (page: Page) => () => studio.nav(page)
@@ -15,7 +16,7 @@
     { id: 'results', label: 'Go to Results', group: 'Navigate', icon: Trophy, run: go('Results') },
     { id: 'history', label: 'Go to History', group: 'Navigate', icon: History, run: go('History') },
     { id: 'mode', label: studio.mode === 'local' ? 'Switch to hosted models' : 'Switch to local models', group: 'Actions', icon: studio.mode === 'local' ? Cloud : Cpu, run: () => studio.switchMode(studio.mode === 'local' ? 'hosted' : 'local') },
-    { id: 'theme', label: studio.theme === 'dark' ? 'Use light theme' : 'Use dark theme', group: 'Actions', icon: studio.theme === 'dark' ? Sun : Moon, run: () => studio.setTheme(studio.theme === 'dark' ? 'light' : 'dark') },
+    { id: 'theme', label: studio.theme === 'dark' ? 'Use light theme' : 'Use dark theme', group: 'Actions', icon: studio.theme === 'dark' ? Sun : Moon, anytime: true, run: () => studio.setTheme(studio.theme === 'dark' ? 'light' : 'dark') },
     { id: 'upload', label: 'Add a model: upload a GGUF file', group: 'Actions', icon: Upload, run: () => studio.openAddModel('upload') },
     { id: 'pull', label: 'Add a model: download by name', group: 'Actions', icon: Download, run: () => studio.openAddModel('pull') },
     { id: 'customize', label: 'Add a model: customize an installed model', group: 'Actions', icon: Rocket, run: () => studio.openAddModel('customize') },
@@ -25,7 +26,7 @@
   ])
   const matches = $derived.by(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
-    return commands.filter((c) => terms.every((t) => (c.label + ' ' + c.group).toLowerCase().includes(t))).slice(0, 40)
+    return commands.filter((c) => (!studio.busy || c.anytime) && terms.every((t) => (c.label + ' ' + c.group).toLowerCase().includes(t))).slice(0, 40)
   })
   $effect(() => { void query; index = 0 })
   $effect(() => { if (studio.paletteOpen) query = '' })
@@ -68,7 +69,7 @@
             {#if i === index}<CornerDownLeft size={13} class="shrink-0 text-faint" aria-hidden="true" />{/if}
           </li>
         {:else}
-          <li class="px-3 py-8 text-center text-sm text-faint" role="presentation">Nothing matches “{query}”.</li>
+          <li class="px-3 py-8 text-center text-sm text-faint" role="presentation">{studio.busy && !query ? 'Other commands are available when the current run finishes.' : `Nothing matches “${query}”.`}</li>
         {/each}
       </ul>
     </div>

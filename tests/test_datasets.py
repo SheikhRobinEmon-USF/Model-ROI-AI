@@ -24,3 +24,17 @@ def test_duplicate_rejected():
     row=cases()[0].model_dump_json()
     with pytest.raises(ValueError,match='Duplicate'):
         validate_jsonl((row+'\n'+row).encode())
+
+
+def test_exact_grader_accepts_one_fence_around_the_whole_answer():
+    from modelroi.graders.exact import grade, structure_metrics
+    case = cases()[0]
+    answer = json.dumps(case.expected)
+    fenced = grade(case, "```json\n" + answer + "\n```")
+    assert fenced == {"passed": True, "reason": "exact_match", "json_fenced": True}
+    assert grade(case, "  ```\n" + answer + "\n```\n") ["passed"]
+    assert structure_metrics(case, "```json\n" + answer + "\n```")["schema_valid"]
+    assert grade(case, answer) == {"passed": True, "reason": "exact_match"}
+    # Prose around the block, or two blocks, is still not "only JSON".
+    assert grade(case, "Here it is:\n```json\n" + answer + "\n```")["reason"] == "invalid_json"
+    assert grade(case, "```json\n" + answer + "\n```\n```json\n" + answer + "\n```")["reason"] == "invalid_json"
